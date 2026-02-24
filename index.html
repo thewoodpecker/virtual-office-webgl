@@ -64,9 +64,11 @@ canvas{display:block}
 
 /* ─── FLOOR PANEL (left) ─── */
 #floor-panel{position:fixed;top:48px;left:0;bottom:22px;z-index:50;
-  display:flex;flex-direction:column;gap:2px;width:150px;padding:0;
-  justify-content:center;border-right:1px solid var(--hud-border);
+  display:flex;flex-direction:column;width:150px;padding:0;
+  border-right:1px solid var(--hud-border);
   background:linear-gradient(90deg,rgba(2,3,8,0.5) 0%,transparent 100%)}
+#floor-panel .floor-buttons{display:flex;flex-direction:column;gap:2px;
+  flex:1;justify-content:center}
 #floor-panel button{background:transparent;border:none;border-bottom:1px solid rgba(var(--accent),0.1);
   color:rgba(var(--accent),0.55);width:100%;
   padding:6px 10px;border-radius:0;cursor:pointer;font-size:10px;text-align:left;
@@ -79,16 +81,22 @@ canvas{display:block}
   letter-spacing:2px;padding:4px 10px 1px;margin-top:12px;
   font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
   border-top:1px solid rgba(var(--accent),0.08)}
+#autoplay-toggle{flex-shrink:0;border-top:1px solid rgba(var(--accent),0.2);
+  border-bottom:none;color:var(--bright-hex);background:rgba(var(--accent),0.08);
+  font-weight:600;letter-spacing:1px}
 
 /* ─── RIGHT PANEL ─── */
 #right-panel{position:fixed;top:48px;right:0;bottom:22px;z-index:50;
-  display:flex;flex-direction:column;gap:2px;width:120px;padding:0;
-  justify-content:center;border-left:1px solid var(--hud-border);
+  display:flex;flex-direction:column;width:120px;padding:0;
+  border-left:1px solid var(--hud-border);
   background:linear-gradient(270deg,rgba(2,3,8,0.5) 0%,transparent 100%)}
+#right-panel .right-buttons{display:flex;flex-direction:column;gap:2px;
+  flex:1;justify-content:center}
+#right-panel .export-section{flex-shrink:0;border-top:1px solid rgba(var(--accent),0.2)}
 #right-panel .panel-label{color:rgba(var(--accent),0.5);font-size:8px;letter-spacing:2px;
   padding:4px 8px 1px;margin-top:12px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
   border-top:1px solid rgba(var(--accent),0.08)}
-#right-panel .panel-label:first-child{margin-top:0;border-top:none}
+#right-panel .right-buttons .panel-label:first-child{margin-top:0;border-top:none}
 #right-panel button{background:transparent;border:none;border-bottom:1px solid rgba(var(--accent),0.1);
   color:rgba(var(--accent),0.5);width:100%;
   padding:5px 8px;border-radius:0;cursor:pointer;font-size:9px;text-align:left;
@@ -96,6 +104,30 @@ canvas{display:block}
   pointer-events:auto}
 #right-panel button:hover{color:var(--accent-hex);background:rgba(var(--accent),0.06)}
 #right-panel button.active{color:var(--bright-hex);background:rgba(var(--accent),0.1)}
+
+/* ─── Export controls ─── */
+.export-duration{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;
+  font-size:9px;font-family:'SF Mono',Consolas,monospace;color:rgba(var(--accent),0.5)}
+.export-duration label{letter-spacing:.5px}
+.duration-control{display:flex;align-items:center;gap:4px}
+.dur-btn{background:transparent;border:1px solid rgba(var(--accent),0.3);color:var(--accent-hex);
+  width:18px;height:18px;cursor:pointer;font-size:11px;line-height:1;
+  font-family:'SF Mono',Consolas,monospace;padding:0;pointer-events:auto;
+  display:flex;align-items:center;justify-content:center;transition:all .2s}
+.dur-btn:hover{background:rgba(var(--accent),0.15);color:var(--bright-hex)}
+#dur-value{font-size:10px;color:var(--bright-hex);min-width:20px;text-align:center;
+  font-family:'SF Mono',Consolas,monospace}
+.export-option{padding:2px 8px;font-size:9px;font-family:'SF Mono',Consolas,monospace;
+  color:rgba(var(--accent),0.5);display:flex;align-items:center}
+.export-option label{display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer;letter-spacing:.5px;pointer-events:auto}
+.export-option input[type="checkbox"]{accent-color:var(--accent-hex);width:12px;height:12px;cursor:pointer}
+.export-btn{pointer-events:auto}
+.export-btn:disabled{opacity:0.3;cursor:not-allowed}
+.export-btn.exporting{color:var(--bright-hex);opacity:1!important}
+.export-btn.exporting::after{content:'';display:inline-block;width:8px;height:8px;
+  border:1.5px solid rgba(var(--accent),0.3);border-top-color:var(--bright-hex);
+  border-radius:50%;margin-left:6px;animation:exspin 0.7s linear infinite;vertical-align:middle}
+@keyframes exspin{to{transform:rotate(360deg)}}
 
 /* ─── INFO OVERLAY (tooltip) ─── */
 #info-overlay{display:none;position:fixed;left:0;top:0;
@@ -130,6 +162,75 @@ canvas{display:block}
   display:none;opacity:0}
 .floor-label.visible{display:block;opacity:1}
 
+/* ─── Mobile settings toggle ─── */
+#mobile-settings-btn{display:none;position:fixed;top:52px;right:6px;z-index:60;
+  width:32px;height:32px;border-radius:0;border:1px solid rgba(var(--accent),0.3);
+  background:var(--hud-bg);color:var(--accent-hex);font-size:16px;cursor:pointer;
+  pointer-events:auto;backdrop-filter:blur(8px);
+  font-family:'SF Mono',Consolas,monospace;line-height:1;padding:0;
+  align-items:center;justify-content:center;transition:all .25s}
+#mobile-settings-btn:hover{background:rgba(var(--accent),0.15);color:var(--bright-hex)}
+
+/* ─── MOBILE ─── */
+@media(max-width:768px){
+  /* Top bar — slimmer */
+  #hud-top{height:36px;padding:0 10px}
+  #hud-top span{font-size:7px;letter-spacing:1.5px}
+  #hud-logo{height:20px}
+  #fps-counter{height:36px;font-size:7px;right:10px}
+
+  /* Bottom bar — slimmer */
+  #hud-bottom{height:18px;padding:0 10px}
+  #hud-bottom span{font-size:6px;letter-spacing:1px}
+  #hud-status{display:none}
+
+  /* Corner brackets adjust */
+  .hud-corner.tl,.hud-corner.tr{top:36px}
+  .hud-corner.bl,.hud-corner.br{bottom:18px}
+  #hud-frame .side-line.left{top:60px;bottom:40px}
+  #hud-frame .side-line.right{top:60px;bottom:40px}
+
+  /* Floor panel — horizontal strip at bottom */
+  #floor-panel{position:fixed;top:auto;left:0;right:0;bottom:18px;
+    width:100%;height:auto;flex-direction:row;
+    border-right:none;border-top:1px solid var(--hud-border);
+    background:linear-gradient(0deg,rgba(2,3,8,0.85) 0%,rgba(2,3,8,0.6) 100%);
+    padding:0;overflow:hidden}
+  #floor-panel .floor-buttons{flex-direction:row;flex-wrap:nowrap;gap:0;
+    overflow-x:auto;overflow-y:hidden;justify-content:flex-start;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  #floor-panel .floor-buttons::-webkit-scrollbar{display:none}
+  #floor-panel .floor-group-label{display:none}
+  #floor-panel button{width:auto;white-space:nowrap;padding:8px 12px;
+    font-size:9px;border-bottom:none;border-right:1px solid rgba(var(--accent),0.1);
+    flex-shrink:0}
+  #autoplay-toggle{border-top:none;border-right:none;
+    border-left:1px solid rgba(var(--accent),0.2);flex-shrink:0}
+
+  /* Settings toggle visible on mobile */
+  #mobile-settings-btn{display:flex;top:40px}
+
+  /* Right panel — off-screen slide-in drawer */
+  #right-panel{position:fixed;top:36px;right:0;bottom:18px;
+    width:140px;transform:translateX(100%);transition:transform .3s ease;
+    z-index:55;background:rgba(2,3,8,0.92);backdrop-filter:blur(12px);
+    border-left:1px solid var(--hud-border)}
+  #right-panel.open{transform:translateX(0)}
+
+  /* Info overlay — centered on mobile */
+  #info-overlay{left:50%!important;top:50%!important;
+    transform:translate(-50%,-50%);max-width:85vw}
+
+  /* 3D labels smaller */
+  .floor-label{font-size:8px;padding:3px 8px}
+}
+
+/* Small phones */
+@media(max-width:400px){
+  #floor-panel button{padding:6px 8px;font-size:8px}
+  #right-panel{width:120px}
+}
+
 </style>
 </head>
 <body>
@@ -156,23 +257,48 @@ canvas{display:block}
 
 <div id="floor-panel"></div>
 
+<button id="mobile-settings-btn" aria-label="Settings">⚙</button>
+
 <div id="right-panel">
-  <div class="panel-label">Layout</div>
-  <button data-layout="0" class="active">Tower</button>
-  <button data-layout="1">Campus</button>
-  <button data-layout="2">Pyramid</button>
-  <button data-layout="3">Stacked</button>
-  <button data-layout="4">Zigzag</button>
-  <button data-layout="5">Skyscraper</button>
-  <button data-layout="6">Split</button>
-  <button data-layout="7">Spiral</button>
-  <div class="panel-label">Color</div>
-  <button class="theme-btn" data-theme="0">Neon Flux</button>
-  <button class="theme-btn active" data-theme="1">Solar Forge</button>
-  <button class="theme-btn" data-theme="2">Synth Wave</button>
-  <button class="theme-btn" data-theme="3">Ice Circuit</button>
-  <button class="theme-btn" data-theme="4">Phosphor</button>
-  <button class="theme-btn" data-theme="5">Ghost Wire</button>
+  <div class="right-buttons">
+    <div class="panel-label">Layout</div>
+    <button data-layout="0" class="active">Tower</button>
+    <button data-layout="1">Campus</button>
+    <button data-layout="2">Pyramid</button>
+    <button data-layout="3">Stacked</button>
+    <button data-layout="4">Zigzag</button>
+    <button data-layout="5">Skyscraper</button>
+    <button data-layout="6">Split</button>
+    <button data-layout="7">Spiral</button>
+    <div class="panel-label">Color</div>
+    <button class="theme-btn" data-theme="0">Neon Flux</button>
+    <button class="theme-btn active" data-theme="1">Solar Forge</button>
+    <button class="theme-btn" data-theme="2">Synth Wave</button>
+    <button class="theme-btn" data-theme="3">Ice Circuit</button>
+    <button class="theme-btn" data-theme="4">Phosphor</button>
+    <button class="theme-btn" data-theme="5">Ghost Wire</button>
+  </div>
+  <div class="export-section" style="display:none">
+    <div class="panel-label">Export</div>
+    <div class="export-duration" style="display:none">
+      <label>Per Room</label>
+      <div class="duration-control">
+        <button class="dur-btn" data-delta="-1">−</button>
+        <span id="dur-value">3s</span>
+        <button class="dur-btn" data-delta="1">+</button>
+      </div>
+    </div>
+    <div class="export-option">
+      <label>Roam Logo <input type="checkbox" id="export-logo" checked></label>
+    </div>
+    <button class="export-btn" data-export="youtube">YouTube 4K</button>
+    <button class="export-btn" data-export="twitter">Twitter HD</button>
+    <button class="export-btn" data-export="tiktok">TikTok</button>
+    <button class="export-btn" data-export="reels">Reels</button>
+    <button class="export-btn" data-export="insta">Insta Post</button>
+    <button class="export-btn" data-export="square">Square</button>
+  </div>
+  </div>
 </div>
 
 <div id="info-overlay">
@@ -1498,13 +1624,14 @@ function setupLighting() {
    INTERACTIVITY
    ============================================================ */
 function onPointerMove(e) {
+  if (isRecording) return;
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   lastInteraction = Date.now();
 }
 
 function checkHover() {
-  if (camAnim.active || layoutAnim.active) return;
+  if (isRecording || camAnim.active || layoutAnim.active) return;
   raycaster.setFromCamera(mouse, camera);
   const hits = raycaster.intersectObjects(roomGlassMeshes);
   let newHover = -1;
@@ -1537,21 +1664,21 @@ function checkHover() {
 }
 
 function onClick(e) {
-  if (e.button !== 0) return;
+  if (isRecording || e.button !== 0) return;
   lastInteraction = Date.now();
   raycaster.setFromCamera(mouse, camera);
   const hits = raycaster.intersectObjects(roomGlassMeshes);
   if (hits.length > 0) {
     const idx = roomGlassMeshes.indexOf(hits[0].object);
-    if (idx >= 0) { focusRoom(idx); startAutoTourFrom(idx); }
+    if (idx >= 0) { stopAutoTour(); focusRoom(idx); }
   }
 }
 
 function onContextMenu(e) {
   e.preventDefault();
   lastInteraction = Date.now();
+  stopAutoTour();
   resetView();
-  startAutoTour();
 }
 
 function focusRoom(idx) {
@@ -1564,7 +1691,7 @@ function focusRoom(idx) {
   }
   roomLabels[idx].classList.add('visible');
   animateCamera(ROOM_CAM[idx].pos, ROOM_CAM[idx].target);
-  setTimeout(() => showOverlay(idx), 800);
+  if (!isRecording) setTimeout(() => showOverlay(idx), 800);
   document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.dataset.room) === idx);
   });
@@ -1604,6 +1731,13 @@ function showOverlay(idx) {
   document.getElementById('overlay-desc').textContent = ROOM_INFO[idx].desc;
   const overlay = document.getElementById('info-overlay');
   overlay.style.display = 'block';
+
+  // On mobile, CSS handles centering via transform
+  if (window.innerWidth <= 768) {
+    overlay.style.left = '';
+    overlay.style.top = '';
+    return;
+  }
 
   // Position tooltip to the right of the active room button
   const btn = document.querySelector(`#floor-panel button[data-room="${idx}"]`);
@@ -1681,13 +1815,17 @@ function buildFloorPanel() {
   const panel = document.getElementById('floor-panel');
   panel.innerHTML = '';
 
+  // Wrapper keeps room buttons vertically centered
+  const wrap = document.createElement('div');
+  wrap.className = 'floor-buttons';
+
   // Overview button
   const ovBtn = document.createElement('button');
   ovBtn.className = 'overview';
   ovBtn.dataset.action = 'overview';
   ovBtn.textContent = '◎ Overview';
-  ovBtn.addEventListener('click', () => { lastInteraction = Date.now(); resetView(); startAutoTour(); });
-  panel.appendChild(ovBtn);
+  ovBtn.addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); resetView(); });
+  wrap.appendChild(ovBtn);
 
   // Room buttons grouped by floor (top floor first)
   const floors = FLOOR_LAYOUT;
@@ -1695,16 +1833,30 @@ function buildFloorPanel() {
     const label = document.createElement('div');
     label.className = 'floor-group-label';
     label.textContent = `Floor ${fi + 1}`;
-    panel.appendChild(label);
+    wrap.appendChild(label);
 
     floors[fi].forEach(ri => {
       const btn = document.createElement('button');
       btn.dataset.room = ri;
       btn.textContent = ROOM_INFO[ri].name;
-      btn.addEventListener('click', () => { lastInteraction = Date.now(); focusRoom(ri); startAutoTourFrom(ri); });
-      panel.appendChild(btn);
+      btn.addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); focusRoom(ri); });
+      wrap.appendChild(btn);
     });
   }
+  panel.appendChild(wrap);
+
+  // Autoplay toggle button — pinned at bottom
+  const autoBtn = document.createElement('button');
+  autoBtn.id = 'autoplay-toggle';
+  autoBtn.textContent = autoTourInterval ? '■ Stop Tour' : '▶ Auto Tour';
+  autoBtn.addEventListener('click', () => {
+    if (autoTourInterval) {
+      stopAutoTour();
+    } else {
+      startAutoTour();
+    }
+  });
+  panel.appendChild(autoBtn);
 }
 
 /* ============================================================
@@ -1826,7 +1978,31 @@ function init() {
 
   // Overlay buttons
   document.getElementById('overlay-close-btn').addEventListener('click', hideOverlay);
-  document.getElementById('overlay-overview-btn').addEventListener('click', () => { lastInteraction = Date.now(); resetView(); startAutoTour(); });
+  document.getElementById('overlay-overview-btn').addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); resetView(); });
+
+  // Duration +/- buttons
+  document.querySelectorAll('.dur-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const delta = parseInt(btn.dataset.delta);
+      exportRoomDuration = Math.max(1, Math.min(10, exportRoomDuration + delta));
+      document.getElementById('dur-value').textContent = exportRoomDuration + 's';
+    });
+  });
+
+  // Export preset buttons
+  document.querySelectorAll('.export-btn').forEach(btn => {
+    btn.addEventListener('click', () => recordVideo(btn.dataset.export));
+  });
+
+  // Mobile settings toggle
+  document.getElementById('mobile-settings-btn').addEventListener('click', () => {
+    document.getElementById('right-panel').classList.toggle('open');
+  });
+
+  // Close right panel when clicking outside on mobile
+  renderer.domElement.addEventListener('pointerdown', () => {
+    document.getElementById('right-panel').classList.remove('open');
+  });
 
   // Start auto-tour
   startAutoTour();
@@ -1848,11 +2024,15 @@ function getAutoTourOrder() {
   return order;
 }
 
+function updateAutoplayButton() {
+  const btn = document.getElementById('autoplay-toggle');
+  if (btn) btn.textContent = autoTourInterval ? '■ Stop Tour' : '▶ Auto Tour';
+}
+
 function startAutoTour() {
   clearInterval(autoTourInterval);
   const order = getAutoTourOrder();
-  autoTourIdx = -1; // start at -1 = overview
-  // Start with overview
+  autoTourIdx = -1;
   resetView();
   autoTourInterval = setInterval(() => {
     autoTourIdx++;
@@ -1863,6 +2043,7 @@ function startAutoTour() {
       focusRoom(order[autoTourIdx]);
     }
   }, 2000);
+  updateAutoplayButton();
 }
 
 function startAutoTourFrom(roomIdx) {
@@ -1879,11 +2060,129 @@ function startAutoTourFrom(roomIdx) {
       focusRoom(order[autoTourIdx]);
     }
   }, 2000);
+  updateAutoplayButton();
 }
 
 function stopAutoTour() {
   clearInterval(autoTourInterval);
   autoTourInterval = null;
+  updateAutoplayButton();
+}
+
+/* ============================================================
+   VIDEO EXPORT
+   ============================================================ */
+const EXPORT_PRESETS = {
+  youtube: { w: 3840, h: 2160, name: 'youtube-4k' },
+  twitter: { w: 1920, h: 1080, name: 'twitter-hd' },
+  tiktok:  { w: 1080, h: 1920, name: 'tiktok' },
+  reels:   { w: 1080, h: 1920, name: 'reels' },
+  insta:   { w: 1080, h: 1350, name: 'insta-post' },
+  square:  { w: 1080, h: 1080, name: 'square' },
+};
+let exportRoomDuration = 3;
+let isRecording = false;
+
+function waitForCameraAnim() {
+  return new Promise(resolve => {
+    const check = () => camAnim.active ? requestAnimationFrame(check) : resolve();
+    check();
+  });
+}
+
+function waitSeconds(s) {
+  return new Promise(resolve => setTimeout(resolve, s * 1000));
+}
+
+async function recordVideo(presetKey) {
+  const preset = EXPORT_PRESETS[presetKey];
+  if (!preset || isRecording) return;
+  isRecording = true;
+  stopAutoTour();
+  hideOverlay();
+
+  const clickedBtn = document.querySelector(`.export-btn[data-export="${presetKey}"]`);
+  clickedBtn.classList.add('exporting');
+  document.querySelectorAll('.export-btn').forEach(b => b.disabled = true);
+
+  let capturing = false;
+
+  try {
+    const includeLogo = document.getElementById('export-logo')?.checked ?? false;
+    const logoImg = (includeLogo && document.getElementById('hud-logo')) || null;
+
+    // Composite canvas copies each rendered frame from the main canvas
+    const w = renderer.domElement.width;
+    const h = renderer.domElement.height;
+    const recCanvas = document.createElement('canvas');
+    recCanvas.width = w;
+    recCanvas.height = h;
+    const recCtx = recCanvas.getContext('2d');
+
+    capturing = true;
+    function captureFrame() {
+      if (!capturing) return;
+      recCtx.drawImage(renderer.domElement, 0, 0);
+      if (logoImg?.complete) {
+        const lh = Math.round(h * 0.04);
+        const lw = Math.round(lh * (logoImg.naturalWidth / logoImg.naturalHeight));
+        recCtx.drawImage(logoImg, (w - lw) / 2, Math.round(h * 0.03), lw, lh);
+      }
+      requestAnimationFrame(captureFrame);
+    }
+    captureFrame();
+
+    // Prefer MP4, fall back to WebM
+    const stream = recCanvas.captureStream(60);
+    const chunks = [];
+    const mp4Ok = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1');
+    const mimeType = mp4Ok ? 'video/mp4;codecs=avc1'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+    const fileExt = mp4Ok ? 'mp4' : 'webm';
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 20_000_000 });
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.start();
+
+    // Run full tour
+    const order = getAutoTourOrder();
+
+    resetView();
+    await waitForCameraAnim();
+    await waitSeconds(exportRoomDuration);
+
+    for (const ri of order) {
+      focusRoom(ri);
+      await waitForCameraAnim();
+      await waitSeconds(exportRoomDuration);
+    }
+
+    resetView();
+    await waitForCameraAnim();
+    await waitSeconds(exportRoomDuration);
+
+    // Finish recording
+    capturing = false;
+    await new Promise(resolve => { recorder.onstop = resolve; recorder.stop(); });
+
+    // Trigger download
+    const blob = new Blob(chunks, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `roam-${preset.name}.${fileExt}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Export failed:', err);
+  } finally {
+    capturing = false;
+    isRecording = false;
+    clickedBtn.classList.remove('exporting');
+    document.querySelectorAll('.export-btn').forEach(b => b.disabled = false);
+    resetView();
+    startAutoTour();
+  }
 }
 
 /* ============================================================
