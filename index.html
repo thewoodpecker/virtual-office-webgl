@@ -217,9 +217,9 @@ canvas{display:block}
     border-left:1px solid var(--hud-border)}
   #right-panel.open{transform:translateX(0)}
 
-  /* Info overlay — centered on mobile */
-  #info-overlay{left:50%!important;top:50%!important;
-    transform:translate(-50%,-50%);max-width:85vw}
+  /* Info overlay — full-width, pinned above floor strip */
+  #info-overlay{left:0!important;right:0;top:auto!important;bottom:calc(18px + 36px);
+    transform:none;max-width:100%;width:100%;border-left:none;border-right:none}
 
   /* 3D labels smaller */
   .floor-label{font-size:8px;padding:3px 8px}
