@@ -280,6 +280,7 @@ const ROOM_GAP = 1.0;
 const SLAB_OVERHANG = 0.3;
 const FLOOR_GAP = 0.7;
 const TUBE_T = 0.025;
+const TUBE_T_INTERIOR = 0.015;
 const NUM_ROOMS = 8;
 
 // Per-room sizes: { w, d, h }
@@ -421,7 +422,7 @@ function computePositions(preset) {
       const rz = preset.offsets[ri]?.dz || 0;
       ROOM_POS[ri] = { x: rx, y: floorY, z: rz };
       ROOM_CAM[ri] = {
-        pos:    new THREE.Vector3(rx + sz.w * 2, floorY + sz.h * 2, rz + sz.d * 2),
+        pos:    new THREE.Vector3(rx + sz.w * 3, floorY + sz.h * 3, rz + sz.d * 3),
         target: new THREE.Vector3(rx, floorY + sz.h * 0.5, rz),
       };
       ROOM_FLOOR[ri] = fi;
@@ -444,6 +445,7 @@ const roomGlowLights  = [];
 const roomLabels      = [];
 const roomGroupRefs   = [];
 const roomInteriorRefs = [];
+const roomGlowBoxes   = [];
 const vehicles        = [];
 let gridMinorMat, gridMajorMat, gridGlowMat;
 let roadSurfaceMats = [], roadEdgeMats = [], roadCenterMat;
@@ -593,9 +595,10 @@ function addScreen(group, type, w, h, x, iy, z, rotY) {
   group.add(scr);
 }
 
-function makeNeonEdges(w, h, d, mat) {
+function makeInteriorEdges(w, h, d, mat) { return makeNeonEdges(w, h, d, mat, TUBE_T_INTERIOR); }
+function makeNeonEdges(w, h, d, mat, thickness) {
   const g = new THREE.Group();
-  const hw=w/2, hh=h/2, hd=d/2, t=TUBE_T;
+  const hw=w/2, hh=h/2, hd=d/2, t=thickness||TUBE_T;
   const edges = [
     {s:[w+t,t,t],p:[0,-hh,hd]},{s:[w+t,t,t],p:[0,-hh,-hd]},
     {s:[t,t,d+t],p:[-hw,-hh,0]},{s:[t,t,d+t],p:[hw,-hh,0]},
@@ -614,6 +617,25 @@ function makeNeonEdges(w, h, d, mat) {
 /* ============================================================
    BUILDING CONSTRUCTION
    ============================================================ */
+function setInteriorOpacity(group, opacity) {
+  group.traverse(c => {
+    if (c.material) {
+      c.material.transparent = true;
+      c.material.opacity = opacity;
+    }
+  });
+}
+
+function setRoomGroupOpacity(roomIdx, opacity) {
+  if (!roomGroupRefs[roomIdx]) return;
+  roomGroupRefs[roomIdx].traverse(c => {
+    if (c.material && c.material.visible !== false && c.material.opacity > 0) {
+      c.material.transparent = true;
+      c.material.opacity = opacity;
+    }
+  });
+}
+
 function clearBuilding() {
   // Remove old label DOM elements from CSS2D renderer container
   roomLabels.forEach(lbl => { if (lbl && lbl.parentNode) lbl.parentNode.removeChild(lbl); });
@@ -625,6 +647,7 @@ function clearBuilding() {
   roomGlowLights.length = 0;
   roomLabels.length = 0;
   roomInteriorRefs.length = 0;
+  roomGlowBoxes.length = 0;
 }
 
 function createBuilding() {
@@ -638,7 +661,7 @@ function createBuilding() {
     roomGroup.position.set(rx, floorY, rz);
 
     // Per-room neon material
-    const neonMat = new THREE.MeshBasicMaterial({ color: NEON });
+    const neonMat = new THREE.MeshBasicMaterial({ color: NEON_BRIGHT });
     roomNeonMats[ri] = neonMat;
 
     // Bottom slab edges
@@ -665,21 +688,27 @@ function createBuilding() {
     roofEdges.position.y = SLAB_H + sz.h + SLAB_H / 2;
     roomGroup.add(roofEdges);
 
-    // Interior ambient light (dim by default)
-    const pl = new THREE.PointLight(WARM_LIGHT, 0.15, sz.w * 1.5, 2);
+    // Selection glow box (hidden by default)
+    const glowMat = new THREE.MeshBasicMaterial({ color: NEON, transparent: true, opacity: 0, side: THREE.BackSide });
+    const glowBox = new THREE.Mesh(new THREE.BoxGeometry(sz.w + 0.6, sz.h + 0.6, sz.d + 0.6), glowMat);
+    glowBox.position.y = SLAB_H + sz.h / 2;
+    roomGroup.add(glowBox);
+    roomGlowBoxes[ri] = glowMat;
+
+    // Interior ambient light
+    const pl = new THREE.PointLight(WARM_LIGHT, 3.0, sz.w * 1.5, 2);
     pl.position.set(0, SLAB_H + sz.h * 0.6, 0);
     roomGroup.add(pl);
     roomLights[ri] = pl;
 
-    // Blue glow light (off by default, activates on select)
-    const gl = new THREE.PointLight(0x4488cc, 0, sz.w * 2, 2);
+    // Blue glow light
+    const gl = new THREE.PointLight(0x4488cc, 1.5, sz.w * 2, 2);
     gl.position.set(0, SLAB_H + sz.h * 0.4, 0);
     roomGroup.add(gl);
     roomGlowLights[ri] = gl;
 
-    // Interior content (hidden until room is selected)
+    // Interior content (always visible, dimmed until selected)
     const interiorGroup = new THREE.Group();
-    interiorGroup.visible = false;
     const iy = SLAB_H + 0.01;
     if (ri === 0) createLobbyInterior(interiorGroup, iy, sz, neonMat);
     if (ri === 1) createConferenceInterior(interiorGroup, iy, sz, neonMat);
@@ -689,6 +718,8 @@ function createBuilding() {
     if (ri === 5) createPrivateOfficeInterior(interiorGroup, iy, sz, neonMat);
     if (ri === 6) createTheaterInterior(interiorGroup, iy, sz, neonMat);
     if (ri === 7) createVideoStudioInterior(interiorGroup, iy, sz, neonMat);
+    // Dim interior by default
+    setInteriorOpacity(interiorGroup, 1.0);
     roomGroup.add(interiorGroup);
     roomInteriorRefs[ri] = interiorGroup;
 
@@ -714,11 +745,11 @@ function createLobbyInterior(group, iy, sz, neonMat) {
   const deskW = 2.4, deskH = 0.9, deskD = 0.8;
   const deskY = iy + deskH / 2;
   // Desk body
-  const desk = makeNeonEdges(deskW, deskH, deskD, neonMat);
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
   desk.position.set(0, deskY, sz.d * 0.1);
   group.add(desk);
   // Desk top surface (thin slab)
-  const topEdge = makeNeonEdges(deskW + 0.2, 0.05, deskD + 0.1, neonMat);
+  const topEdge = makeInteriorEdges(deskW + 0.2, 0.05, deskD + 0.1, neonMat);
   topEdge.position.set(0, iy + deskH + 0.025, sz.d * 0.1);
   group.add(topEdge);
 
@@ -728,11 +759,11 @@ function createLobbyInterior(group, iy, sz, neonMat) {
   // Screen
   addScreen(group, 'pie', monW, monH, 0, monY, sz.d * 0.1 - 0.1, 0);
   // Screen frame
-  const monFrame = makeNeonEdges(monW, monH, 0.03, neonMat);
+  const monFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
   monFrame.position.set(0, monY, sz.d * 0.1 - 0.1);
   group.add(monFrame);
   // Stand pole
-  const pole = makeNeonEdges(0.05, 0.15, 0.05, neonMat);
+  const pole = makeInteriorEdges(0.05, 0.15, 0.05, neonMat);
   pole.position.set(0, iy + deskH + 0.075, sz.d * 0.1 - 0.1);
   group.add(pole);
 
@@ -740,16 +771,16 @@ function createLobbyInterior(group, iy, sz, neonMat) {
   const elevW = 1.6, elevH = sz.h * 0.7, elevD = 0.15;
   const elevY = iy + elevH / 2;
   // Elevator frame (tall rectangle on back wall)
-  const elevFrame = makeNeonEdges(elevW, elevH, elevD, neonMat);
+  const elevFrame = makeInteriorEdges(elevW, elevH, elevD, neonMat);
   elevFrame.position.set(0, elevY, -sz.d / 2 + elevD / 2 + 0.1);
   group.add(elevFrame);
   // Door split line (vertical center line)
-  const doorLine = makeNeonEdges(0.03, elevH - 0.2, 0.03, neonMat);
+  const doorLine = makeInteriorEdges(0.03, elevH - 0.2, 0.03, neonMat);
   doorLine.position.set(0, elevY, -sz.d / 2 + 0.2);
   group.add(doorLine);
   // Floor indicator above elevator
   const indW = 0.5, indH = 0.2;
-  const indFrame = makeNeonEdges(indW, indH, 0.03, neonMat);
+  const indFrame = makeInteriorEdges(indW, indH, 0.03, neonMat);
   indFrame.position.set(0, iy + elevH + 0.2, -sz.d / 2 + 0.2);
   group.add(indFrame);
 }
@@ -761,11 +792,11 @@ function createInterviewInterior(group, iy, sz, neonMat) {
   // --- Desk (centered, slightly toward back) ---
   const deskW = 2.2, deskH = 0.75, deskD = 1.0;
   const deskZ = -0.3;
-  const desk = makeNeonEdges(deskW, deskH, deskD, neonMat);
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
   desk.position.set(0, iy + deskH / 2, deskZ);
   group.add(desk);
   // Desk top
-  const top = makeNeonEdges(deskW + 0.1, 0.04, deskD + 0.05, neonMat);
+  const top = makeInteriorEdges(deskW + 0.1, 0.04, deskD + 0.05, neonMat);
   top.position.set(0, iy + deskH + 0.02, deskZ);
   group.add(top);
 
@@ -774,22 +805,17 @@ function createInterviewInterior(group, iy, sz, neonMat) {
   const seatW = 0.55, seatH = 0.08, seatD = 0.5;
   const chairZ = deskZ - deskD / 2 - 0.6;
   const chairSeatY = iy + 0.45;
-  const seat = makeNeonEdges(seatW, seatH, seatD, neonMat);
+  const seat = makeInteriorEdges(seatW, seatH, seatD, neonMat);
   seat.position.set(0, chairSeatY, chairZ);
   group.add(seat);
-  // Backrest (taller)
-  const backW = 0.5, backH = 0.6, backD = 0.06;
-  const back = makeNeonEdges(backW, backH, backD, neonMat);
-  back.position.set(0, chairSeatY + seatH / 2 + backH / 2, chairZ - seatD / 2);
-  group.add(back);
   // Pedestal
-  const pole = makeNeonEdges(0.06, 0.35, 0.06, neonMat);
+  const pole = makeInteriorEdges(0.06, 0.35, 0.06, neonMat);
   pole.position.set(0, iy + 0.175, chairZ);
   group.add(pole);
   // Base star (5 small legs)
   for (let a = 0; a < 5; a++) {
     const ang = (a / 5) * Math.PI * 2;
-    const leg = makeNeonEdges(0.3, 0.04, 0.04, neonMat);
+    const leg = makeInteriorEdges(0.3, 0.04, 0.04, neonMat);
     leg.position.set(Math.sin(ang) * 0.18, iy + 0.02, chairZ + Math.cos(ang) * 0.18);
     leg.rotation.y = -ang;
     group.add(leg);
@@ -799,16 +825,12 @@ function createInterviewInterior(group, iy, sz, neonMat) {
   const guestZ = deskZ + deskD / 2 + 0.7;
   [-0.7, 0.7].forEach(gx => {
     // Seat
-    const gs = makeNeonEdges(0.45, 0.06, 0.4, neonMat);
+    const gs = makeInteriorEdges(0.45, 0.06, 0.4, neonMat);
     gs.position.set(gx, iy + 0.42, guestZ);
     group.add(gs);
-    // Backrest
-    const gb = makeNeonEdges(0.42, 0.4, 0.05, neonMat);
-    gb.position.set(gx, iy + 0.42 + 0.03 + 0.2, guestZ + 0.2);
-    group.add(gb);
     // 4 legs
     [[-0.18, -0.15],[0.18, -0.15],[-0.18, 0.15],[0.18, 0.15]].forEach(([lx, lz]) => {
-      const leg = makeNeonEdges(0.03, 0.42, 0.03, neonMat);
+      const leg = makeInteriorEdges(0.03, 0.42, 0.03, neonMat);
       leg.position.set(gx + lx, iy + 0.21, guestZ + lz);
       group.add(leg);
     });
@@ -832,18 +854,18 @@ function createSalesFloorInterior(group, iy, sz, neonMat) {
     // Pod desk — L-shaped using 2 pieces
     const deskH = 0.75;
     // Front piece
-    const d1 = makeNeonEdges(2.0, 0.06, 0.8, neonMat);
+    const d1 = makeInteriorEdges(2.0, 0.06, 0.8, neonMat);
     d1.position.set(pp.x, iy + deskH, pp.z);
     group.add(d1);
     // Side wing
-    const d2 = makeNeonEdges(0.8, 0.06, 1.2, neonMat);
+    const d2 = makeInteriorEdges(0.8, 0.06, 1.2, neonMat);
     d2.position.set(pp.x - 0.6, iy + deskH, pp.z - 0.2);
     group.add(d2);
 
     // Desk legs (4 corners of L)
     [[pp.x - 0.9, pp.z - 0.35], [pp.x + 0.9, pp.z - 0.35],
      [pp.x + 0.9, pp.z + 0.35], [pp.x - 0.9, pp.z - 0.75]].forEach(([lx, lz]) => {
-      const leg = makeNeonEdges(0.03, deskH, 0.03, neonMat);
+      const leg = makeInteriorEdges(0.03, deskH, 0.03, neonMat);
       leg.position.set(lx, iy + deskH / 2, lz);
       group.add(leg);
     });
@@ -853,29 +875,33 @@ function createSalesFloorInterior(group, iy, sz, neonMat) {
     const monY = iy + deskH + 0.06 + monH / 2;
     for (let m = -1; m <= 1; m++) {
       const mx = pp.x + m * 0.6;
-      const mFrame = makeNeonEdges(monW, monH, 0.03, neonMat);
+      const mFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
       mFrame.position.set(mx, monY, pp.z - 0.25);
       group.add(mFrame);
       // Stand
-      const stand = makeNeonEdges(0.03, 0.06, 0.03, neonMat);
+      const stand = makeInteriorEdges(0.03, 0.06, 0.03, neonMat);
       stand.position.set(mx, iy + deskH + 0.03, pp.z - 0.25);
       group.add(stand);
     }
 
     // Chair
     const chairZ = pp.z + 0.65;
-    const seat = makeNeonEdges(0.45, 0.05, 0.4, neonMat);
-    seat.position.set(pp.x, iy + 0.44, chairZ);
+    const cSeatY = iy + 0.44;
+    const seat = makeInteriorEdges(0.45, 0.05, 0.4, neonMat);
+    seat.position.set(pp.x, cSeatY, chairZ);
     group.add(seat);
-    const back = makeNeonEdges(0.42, 0.35, 0.04, neonMat);
-    back.position.set(pp.x, iy + 0.44 + 0.2, chairZ + 0.2);
-    group.add(back);
+    // 4 legs
+    [[-0.18, -0.15],[0.18, -0.15],[-0.18, 0.15],[0.18, 0.15]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, cSeatY - iy, 0.03, neonMat);
+      leg.position.set(pp.x + lx, iy + (cSeatY - iy) / 2, chairZ + lz);
+      group.add(leg);
+    });
   });
 
   // --- Side wall screens (smaller info displays) ---
   [[-sz.w / 2 + 0.15, -sz.d * 0.2, Math.PI / 2],
    [-sz.w / 2 + 0.15,  sz.d * 0.15, Math.PI / 2]].forEach(([sx, sz2, ry]) => {
-    const sf = makeNeonEdges(0.04, sz.h * 0.25, sz.d * 0.2, neonMat);
+    const sf = makeInteriorEdges(0.04, sz.h * 0.25, sz.d * 0.2, neonMat);
     sf.position.set(sx, iy + sz.h * 0.55, sz2);
     group.add(sf);
   });
@@ -887,19 +913,19 @@ function createSalesFloorInterior(group, iy, sz, neonMat) {
 function createConferenceInterior(group, iy, sz, neonMat) {
   // Whiteboard on back wall
   addScreen(group, 'pie', sz.w * 0.7, sz.h * 0.5, 0, iy + sz.h * 0.55, -sz.d/2 + 0.2, 0);
-  const frame = makeNeonEdges(sz.w * 0.7, sz.h * 0.5, 0.05, neonMat);
+  const frame = makeInteriorEdges(sz.w * 0.7, sz.h * 0.5, 0.05, neonMat);
   frame.position.set(0, iy + sz.h * 0.55, -sz.d/2 + 0.2);
   group.add(frame);
 
   // --- Long conference table (centered) ---
   const tW = sz.w * 0.65, tH = 0.75, tD = 1.6;
-  const table = makeNeonEdges(tW, 0.06, tD, neonMat);
+  const table = makeInteriorEdges(tW, 0.06, tD, neonMat);
   table.position.set(0, iy + tH, 0);
   group.add(table);
   // 4 table legs
   [[-tW/2 + 0.15, -tD/2 + 0.1],[tW/2 - 0.15, -tD/2 + 0.1],
    [-tW/2 + 0.15, tD/2 - 0.1],[tW/2 - 0.15, tD/2 - 0.1]].forEach(([lx, lz]) => {
-    const leg = makeNeonEdges(0.04, tH, 0.04, neonMat);
+    const leg = makeInteriorEdges(0.04, tH, 0.04, neonMat);
     leg.position.set(lx, iy + tH / 2, lz);
     group.add(leg);
   });
@@ -909,37 +935,46 @@ function createConferenceInterior(group, iy, sz, neonMat) {
   const chairSeatH = 0.05, chairBackH = 0.35;
   const chairW = 0.4, chairD = 0.35;
 
+  // Helper: add 4 legs to a chair at given position
+  function addChairLegs(cx, cz, hw, hd) {
+    const legH = seatY - iy;
+    [[-hw, -hd],[hw, -hd],[-hw, hd],[hw, hd]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, legH, 0.03, neonMat);
+      leg.position.set(cx + lx, iy + legH / 2, cz + lz);
+      group.add(leg);
+    });
+  }
+
   // 4 chairs on each long side
   for (let i = 0; i < 4; i++) {
     const cx = -tW / 2 + 0.5 + i * (tW - 1) / 3;
     // Back side (negative Z)
     const bz = -tD / 2 - 0.5;
-    const s1 = makeNeonEdges(chairW, chairSeatH, chairD, neonMat);
+    const s1 = makeInteriorEdges(chairW, chairSeatH, chairD, neonMat);
     s1.position.set(cx, seatY, bz);
     group.add(s1);
-    const b1 = makeNeonEdges(chairW - 0.04, chairBackH, 0.04, neonMat);
-    b1.position.set(cx, seatY + chairSeatH / 2 + chairBackH / 2, bz - chairD / 2);
-    group.add(b1);
+    addChairLegs(cx, bz, chairW / 2 - 0.04, chairD / 2 - 0.04);
 
     // Front side (positive Z)
     const fz = tD / 2 + 0.5;
-    const s2 = makeNeonEdges(chairW, chairSeatH, chairD, neonMat);
+    const s2 = makeInteriorEdges(chairW, chairSeatH, chairD, neonMat);
     s2.position.set(cx, seatY, fz);
     group.add(s2);
-    const b2 = makeNeonEdges(chairW - 0.04, chairBackH, 0.04, neonMat);
-    b2.position.set(cx, seatY + chairSeatH / 2 + chairBackH / 2, fz + chairD / 2);
-    group.add(b2);
+    addChairLegs(cx, fz, chairW / 2 - 0.04, chairD / 2 - 0.04);
   }
 
-  // 1 chair on each short end
+  // 1 stool on each short end
   [-tW / 2 - 0.55, tW / 2 + 0.55].forEach(ex => {
-    const s = makeNeonEdges(chairD, chairSeatH, chairW, neonMat);
+    const s = makeInteriorEdges(chairD, chairSeatH, chairW, neonMat);
     s.position.set(ex, seatY, 0);
     group.add(s);
-    const bx = ex < 0 ? ex - chairD / 2 : ex + chairD / 2;
-    const b = makeNeonEdges(0.04, chairBackH, chairW - 0.04, neonMat);
-    b.position.set(bx, seatY + chairSeatH / 2 + chairBackH / 2, 0);
-    group.add(b);
+    const legH = seatY - iy;
+    [[-chairD / 2 + 0.04, -chairW / 2 + 0.04],[chairD / 2 - 0.04, -chairW / 2 + 0.04],
+     [-chairD / 2 + 0.04, chairW / 2 - 0.04],[chairD / 2 - 0.04, chairW / 2 - 0.04]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, legH, 0.03, neonMat);
+      leg.position.set(ex + lx, iy + legH / 2, lz);
+      group.add(leg);
+    });
   });
 }
 
@@ -957,31 +992,31 @@ function createAInboxInterior(group, iy, sz, neonMat) {
     const x2 = Math.cos(a2) * tableR, z2 = Math.sin(a2) * tableR;
     const dx = x2 - x1, dz = z2 - z1;
     const len = Math.sqrt(dx * dx + dz * dz);
-    const edge = makeNeonEdges(len, 0.04, 0.04, neonMat);
+    const edge = makeInteriorEdges(len, 0.04, 0.04, neonMat);
     edge.position.set((x1 + x2) / 2, iy + tableH, (z1 + z2) / 2);
     edge.rotation.y = -Math.atan2(dz, dx);
     group.add(edge);
   }
   // Table pedestal
-  const ped = makeNeonEdges(0.15, tableH - 0.1, 0.15, neonMat);
+  const ped = makeInteriorEdges(0.15, tableH - 0.1, 0.15, neonMat);
   ped.position.set(0, iy + (tableH - 0.1) / 2, 0);
   group.add(ped);
   // Table base
-  const base = makeNeonEdges(0.8, 0.04, 0.8, neonMat);
+  const base = makeInteriorEdges(0.8, 0.04, 0.8, neonMat);
   base.position.set(0, iy + 0.02, 0);
   group.add(base);
 
   // --- Water cooler on table ---
   const coolerH = 0.55;
-  const cooler = makeNeonEdges(0.25, coolerH, 0.25, neonMat);
+  const cooler = makeInteriorEdges(0.25, coolerH, 0.25, neonMat);
   cooler.position.set(0, iy + tableH + coolerH / 2, 0);
   group.add(cooler);
   // Water jug
-  const jug = makeNeonEdges(0.18, 0.25, 0.18, neonMat);
+  const jug = makeInteriorEdges(0.18, 0.25, 0.18, neonMat);
   jug.position.set(0, iy + tableH + coolerH + 0.125, 0);
   group.add(jug);
   // Tap
-  const tap = makeNeonEdges(0.06, 0.04, 0.08, neonMat);
+  const tap = makeInteriorEdges(0.06, 0.04, 0.08, neonMat);
   tap.position.set(0, iy + tableH + coolerH * 0.5, 0.15);
   group.add(tap);
 
@@ -994,17 +1029,10 @@ function createAInboxInterior(group, iy, sz, neonMat) {
     const sz2 = Math.sin(ang) * seatR;
     const chairRot = -ang + Math.PI;
     // Seat pad
-    const seat = makeNeonEdges(0.45, 0.05, 0.4, neonMat);
+    const seat = makeInteriorEdges(0.45, 0.05, 0.4, neonMat);
     seat.position.set(sx, iy + 0.42, sz2);
     seat.rotation.y = chairRot;
     group.add(seat);
-    // Backrest
-    const bx = Math.cos(ang) * (seatR + 0.22);
-    const bz = Math.sin(ang) * (seatR + 0.22);
-    const back = makeNeonEdges(0.42, 0.35, 0.04, neonMat);
-    back.position.set(bx, iy + 0.42 + 0.2, bz);
-    back.rotation.y = chairRot;
-    group.add(back);
     // 4 legs
     const legH = 0.42, legW = 0.03;
     const offsets = [[-0.18, -0.15], [0.18, -0.15], [-0.18, 0.15], [0.18, 0.15]];
@@ -1012,7 +1040,7 @@ function createAInboxInterior(group, iy, sz, neonMat) {
       const cosA = Math.cos(chairRot), sinA = Math.sin(chairRot);
       const wx = lx * cosA - lz * sinA;
       const wz = lx * sinA + lz * cosA;
-      const leg = makeNeonEdges(legW, legH, legW, neonMat);
+      const leg = makeInteriorEdges(legW, legH, legW, neonMat);
       leg.position.set(sx + wx, iy + legH / 2, sz2 + wz);
       group.add(leg);
     });
@@ -1026,40 +1054,37 @@ function createPrivateOfficeInterior(group, iy, sz, neonMat) {
   // --- Desk (centered, slightly toward back) ---
   const deskW = 1.8, deskH = 0.75, deskD = 0.8;
   const deskZ = -0.4;
-  const desk = makeNeonEdges(deskW, deskH, deskD, neonMat);
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
   desk.position.set(0, iy + deskH / 2, deskZ);
   group.add(desk);
   // Desk top
-  const top = makeNeonEdges(deskW + 0.08, 0.04, deskD + 0.04, neonMat);
+  const top = makeInteriorEdges(deskW + 0.08, 0.04, deskD + 0.04, neonMat);
   top.position.set(0, iy + deskH + 0.02, deskZ);
   group.add(top);
 
   // Monitor on desk
   const monW = 0.7, monH = 0.45;
-  const monFrame = makeNeonEdges(monW, monH, 0.03, neonMat);
+  const monFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
   monFrame.position.set(0, iy + deskH + 0.06 + monH / 2, deskZ - 0.15);
   group.add(monFrame);
-  const monStand = makeNeonEdges(0.04, 0.06, 0.04, neonMat);
+  const monStand = makeInteriorEdges(0.04, 0.06, 0.04, neonMat);
   monStand.position.set(0, iy + deskH + 0.03, deskZ - 0.15);
   group.add(monStand);
 
   // --- Office chair (behind desk) ---
   const chairZ = deskZ - deskD / 2 - 0.55;
   const seatY = iy + 0.42;
-  const seat = makeNeonEdges(0.5, 0.06, 0.45, neonMat);
+  const seat = makeInteriorEdges(0.5, 0.06, 0.45, neonMat);
   seat.position.set(0, seatY, chairZ);
   group.add(seat);
-  const back = makeNeonEdges(0.46, 0.55, 0.05, neonMat);
-  back.position.set(0, seatY + 0.03 + 0.275, chairZ - 0.22);
-  group.add(back);
   // Pedestal
-  const pole = makeNeonEdges(0.05, 0.32, 0.05, neonMat);
+  const pole = makeInteriorEdges(0.05, 0.32, 0.05, neonMat);
   pole.position.set(0, iy + 0.16, chairZ);
   group.add(pole);
   // Base legs
   for (let a = 0; a < 5; a++) {
     const ang = (a / 5) * Math.PI * 2;
-    const leg = makeNeonEdges(0.28, 0.03, 0.03, neonMat);
+    const leg = makeInteriorEdges(0.28, 0.03, 0.03, neonMat);
     leg.position.set(Math.sin(ang) * 0.16, iy + 0.015, chairZ + Math.cos(ang) * 0.16);
     leg.rotation.y = -ang;
     group.add(leg);
@@ -1068,16 +1093,16 @@ function createPrivateOfficeInterior(group, iy, sz, neonMat) {
   // --- Corner plant (front-right corner) ---
   const px = sz.w / 2 - 0.6, pz = sz.d / 2 - 0.6;
   // Pot
-  const pot = makeNeonEdges(0.35, 0.3, 0.35, neonMat);
+  const pot = makeInteriorEdges(0.35, 0.3, 0.35, neonMat);
   pot.position.set(px, iy + 0.15, pz);
   group.add(pot);
   // Stem
-  const stem = makeNeonEdges(0.04, 0.6, 0.04, neonMat);
+  const stem = makeInteriorEdges(0.04, 0.6, 0.04, neonMat);
   stem.position.set(px, iy + 0.3 + 0.3, pz);
   group.add(stem);
   // Leaf clusters (3 angled branches)
   [[0.25, 0.15], [-0.2, 0.2], [0.05, -0.22]].forEach(([lx, lz]) => {
-    const leaf = makeNeonEdges(0.3, 0.04, 0.15, neonMat);
+    const leaf = makeInteriorEdges(0.3, 0.04, 0.15, neonMat);
     leaf.position.set(px + lx, iy + 0.75 + Math.random() * 0.2, pz + lz);
     leaf.rotation.z = (Math.random() - 0.5) * 0.4;
     group.add(leaf);
@@ -1087,12 +1112,12 @@ function createPrivateOfficeInterior(group, iy, sz, neonMat) {
   const shelfW = sz.w * 0.5, shelfD = 0.25;
   for (let s = 0; s < 3; s++) {
     const shelfY = iy + 1.2 + s * 0.7;
-    const shelf = makeNeonEdges(shelfW, 0.04, shelfD, neonMat);
+    const shelf = makeInteriorEdges(shelfW, 0.04, shelfD, neonMat);
     shelf.position.set(0, shelfY, -sz.d / 2 + shelfD / 2 + 0.1);
     group.add(shelf);
     // Shelf brackets (2 small vertical supports)
     [-shelfW / 2 + 0.1, shelfW / 2 - 0.1].forEach(bx => {
-      const bracket = makeNeonEdges(0.03, 0.15, 0.03, neonMat);
+      const bracket = makeInteriorEdges(0.03, 0.15, 0.03, neonMat);
       bracket.position.set(bx, shelfY - 0.09, -sz.d / 2 + 0.15);
       group.add(bracket);
     });
@@ -1108,7 +1133,7 @@ function createTheaterInterior(group, iy, sz, neonMat) {
   const stageH = 0.5;
   const stageW = sz.w * 0.85;
   const stageZ = -sz.d / 2 + stageD / 2 + 0.2;
-  const stage = makeNeonEdges(stageW, stageH, stageD, neonMat);
+  const stage = makeInteriorEdges(stageW, stageH, stageD, neonMat);
   stage.position.set(0, iy + stageH / 2, stageZ);
   group.add(stage);
 
@@ -1117,50 +1142,20 @@ function createTheaterInterior(group, iy, sz, neonMat) {
   for (let s = 0; s < 3; s++) {
     const stepH = stageH * ((s + 1) / 3);
     const stepZ = stageZ + stageD / 2 + (2 - s) * stepD + stepD / 2;
-    const step = makeNeonEdges(stepW, stepH, stepD, neonMat);
+    const step = makeInteriorEdges(stepW, stepH, stepD, neonMat);
     step.position.set(0, iy + stepH / 2, stepZ);
     group.add(step);
   }
 
-  // === CURTAINS on back wall behind stage ===
-  const curtainH = sz.h * 0.75;
-  const curtainY = iy + stageH + curtainH / 2;
-  const curtainZ = -sz.d / 2 + 0.15;
-  const numFolds = 10;
-  const curtainW = sz.w * 0.9;
-  const foldW = curtainW / numFolds;
-  // Vertical curtain folds
-  for (let i = 0; i < numFolds; i++) {
-    const fx = -curtainW / 2 + foldW * i + foldW / 2;
-    const fold = makeNeonEdges(0.03, curtainH, 0.03, neonMat);
-    fold.position.set(fx, curtainY, curtainZ);
-    group.add(fold);
-  }
-  // Curtain top rod
-  const rod = makeNeonEdges(curtainW + 0.4, 0.05, 0.05, neonMat);
-  rod.position.set(0, iy + stageH + curtainH + 0.05, curtainZ);
-  group.add(rod);
-  // Rod brackets
-  [-(curtainW / 2 + 0.15), (curtainW / 2 + 0.15)].forEach(bx => {
-    const bracket = makeNeonEdges(0.04, 0.2, 0.06, neonMat);
-    bracket.position.set(bx, iy + stageH + curtainH + 0.15, curtainZ);
-    group.add(bracket);
-  });
-  // Curtain bottom hem
-  const hem = makeNeonEdges(curtainW, 0.04, 0.03, neonMat);
-  hem.position.set(0, iy + stageH + 0.02, curtainZ);
-  group.add(hem);
-  // Draped swag curves at top (2 arcs)
-  [-1, 1].forEach(side => {
-    for (let j = 0; j < 4; j++) {
-      const t = j / 3;
-      const sx = side * (curtainW * 0.25 * (1 - t));
-      const sy = iy + stageH + curtainH - 0.1 - Math.sin(t * Math.PI) * 0.4;
-      const swag = makeNeonEdges(curtainW * 0.08, 0.03, 0.03, neonMat);
-      swag.position.set(sx, sy, curtainZ + 0.03);
-      group.add(swag);
-    }
-  });
+  // === BIG SCREEN on back wall behind stage ===
+  const screenW = sz.w * 0.85;
+  const screenH = sz.h * 0.55;
+  const screenZ = -sz.d / 2 + 0.15;
+  const screenY = iy + stageH + screenH / 2 + 0.3;
+  addScreen(group, 'wave', screenW, screenH, 0, screenY, screenZ, 0);
+  const frame = makeInteriorEdges(screenW, screenH, 0.05, neonMat);
+  frame.position.set(0, screenY, screenZ);
+  group.add(frame);
 
   // === ROWS OF SEATS (banks of 5) ===
   const rows = 4;
@@ -1184,13 +1179,15 @@ function createTheaterInterior(group, iy, sz, neonMat) {
         const sx = bankCenterX - bankW / 2 + s * (seatW + seatGap) + seatW / 2;
         if (Math.abs(sx) > sz.w / 2 - 0.4) continue;
         // Seat
-        const seat = makeNeonEdges(seatW, seatH, seatD, neonMat);
-        seat.position.set(sx, iy + seatH / 2, rowZ);
+        const seat = makeInteriorEdges(seatW, 0.05, seatD, neonMat);
+        seat.position.set(sx, iy + seatH, rowZ);
         group.add(seat);
-        // Backrest
-        const back = makeNeonEdges(seatW, 0.3, 0.05, neonMat);
-        back.position.set(sx, iy + seatH + 0.15, rowZ + seatD / 2);
-        group.add(back);
+        // 2 side supports (theater-style legs)
+        [-seatW / 2 + 0.03, seatW / 2 - 0.03].forEach(dx => {
+          const leg = makeInteriorEdges(0.03, seatH, 0.03, neonMat);
+          leg.position.set(sx + dx, iy + seatH / 2, rowZ);
+          group.add(leg);
+        });
       }
     });
   }
@@ -1206,24 +1203,24 @@ function createVideoStudioInterior(group, iy, sz, neonMat) {
   // === CAMERA ON TRIPOD (centered) ===
   // Three splayed tripod legs
   [[-0.2, 0.2], [0.2, 0.2], [0, -0.25]].forEach(([lx, lz]) => {
-    const leg = makeNeonEdges(0.03, 1.1, 0.03, neonMat);
+    const leg = makeInteriorEdges(0.03, 1.1, 0.03, neonMat);
     leg.position.set(lx, iy + 0.55, lz);
     group.add(leg);
   });
   // Tripod head
-  const tripodHead = makeNeonEdges(0.4, 0.06, 0.06, neonMat);
+  const tripodHead = makeInteriorEdges(0.4, 0.06, 0.06, neonMat);
   tripodHead.position.set(0, iy + 1.15, 0);
   group.add(tripodHead);
   // Camera body
-  const camBody = makeNeonEdges(0.6, 0.35, 0.4, neonMat);
+  const camBody = makeInteriorEdges(0.6, 0.35, 0.4, neonMat);
   camBody.position.set(0, iy + 1.4, 0);
   group.add(camBody);
   // Lens barrel
-  const lens = makeNeonEdges(0.15, 0.15, 0.3, neonMat);
+  const lens = makeInteriorEdges(0.15, 0.15, 0.3, neonMat);
   lens.position.set(0, iy + 1.38, -0.3);
   group.add(lens);
   // Viewfinder
-  const viewfinder = makeNeonEdges(0.12, 0.1, 0.15, neonMat);
+  const viewfinder = makeInteriorEdges(0.12, 0.1, 0.15, neonMat);
   viewfinder.position.set(-0.15, iy + 1.63, 0.1);
   group.add(viewfinder);
   // Record indicator
@@ -1232,18 +1229,18 @@ function createVideoStudioInterior(group, iy, sz, neonMat) {
   group.add(rec);
 
   // === BACKDROP (large panel on back wall) ===
-  const backdrop = makeNeonEdges(sz.w * 0.65, sz.h * 0.75, 0.05, neonMat);
+  const backdrop = makeInteriorEdges(sz.w * 0.65, sz.h * 0.75, 0.05, neonMat);
   backdrop.position.set(0, iy + sz.h * 0.42, -sz.d/2 + 0.3);
   group.add(backdrop);
 
   // === TWO LAMPS HANGING FROM CEILING ===
   [[-sz.w * 0.25, -sz.d * 0.15], [sz.w * 0.25, sz.d * 0.15]].forEach(([lx, lz]) => {
     // Vertical rod hanging from ceiling
-    const rod = makeNeonEdges(0.03, 0.8, 0.03, neonMat);
+    const rod = makeInteriorEdges(0.03, 0.8, 0.03, neonMat);
     rod.position.set(lx, ceilY - 0.4, lz);
     group.add(rod);
     // Lamp housing (rectangular softbox)
-    const housing = makeNeonEdges(0.5, 0.1, 0.4, neonMat);
+    const housing = makeInteriorEdges(0.5, 0.1, 0.4, neonMat);
     housing.position.set(lx, ceilY - 0.85, lz);
     group.add(housing);
   });
@@ -1496,16 +1493,7 @@ function checkHover() {
   if (newHover !== hoveredRoom) {
     // Restore previous hover
     if (hoveredRoom >= 0 && hoveredRoom !== selectedRoom && roomNeonMats[hoveredRoom]) {
-      if (selectedRoom >= 0) {
-        const n = NEON;
-        roomNeonMats[hoveredRoom].color.setRGB(
-          ((n >> 16) & 0xff) / 255 * 0.3,
-          ((n >> 8) & 0xff) / 255 * 0.3,
-          (n & 0xff) / 255 * 0.3
-        );
-      } else {
-        roomNeonMats[hoveredRoom].color.setHex(NEON);
-      }
+      roomNeonMats[hoveredRoom].color.setHex(NEON_BRIGHT);
       if (roomLabels[hoveredRoom]) roomLabels[hoveredRoom].classList.remove('visible');
     }
     // Apply new hover — never show hover labels when a room is selected
@@ -1535,7 +1523,7 @@ function onClick(e) {
   const hits = raycaster.intersectObjects(roomGlassMeshes);
   if (hits.length > 0) {
     const idx = roomGlassMeshes.indexOf(hits[0].object);
-    if (idx >= 0) { stopAutoTour(); focusRoom(idx); }
+    if (idx >= 0) { focusRoom(idx); startAutoTourFrom(idx); }
   }
 }
 
@@ -1548,43 +1536,15 @@ function onContextMenu(e) {
 
 function focusRoom(idx) {
   if (idx < 0 || idx >= NUM_ROOMS) return;
-  // Hide ALL labels first, reset previous selection
-  roomLabels.forEach((lbl, i) => {
-    if (lbl) lbl.classList.remove('visible');
-  });
-  if (selectedRoom >= 0) {
-    roomLights[selectedRoom].intensity = 0.15;
-    roomGlowLights[selectedRoom].intensity = 0;
-    if (roomInteriorRefs[selectedRoom]) roomInteriorRefs[selectedRoom].visible = false;
-  }
+  roomLabels.forEach((lbl, i) => { if (lbl) lbl.classList.remove('visible'); });
   hoveredRoom = -1;
   selectedRoom = idx;
-  // Dim all non-selected rooms, brighten selected
   for (let i = 0; i < NUM_ROOMS; i++) {
-    if (i === idx) {
-      roomNeonMats[i].color.setHex(NEON_BRIGHT);
-      if (roomGroupRefs[i]) roomGroupRefs[i].traverse(c => {
-        if (c.material && c.material !== roomNeonMats[i]) {
-          if (c.material.opacity !== undefined) c.material.opacity = c.material._origOpacity ?? c.material.opacity;
-        }
-      });
-    } else {
-      if (roomNeonMats[i]) roomNeonMats[i].color.setRGB(
-        ((NEON >> 16) & 0xff) / 255 * 0.3,
-        ((NEON >> 8) & 0xff) / 255 * 0.3,
-        (NEON & 0xff) / 255 * 0.3
-      );
-      if (roomLights[i]) roomLights[i].intensity = 0.02;
-    }
+    setRoomGroupOpacity(i, i === idx ? 1.0 : 0.4);
   }
-  roomLights[idx].intensity = 3.0;
-  roomGlowLights[idx].intensity = 1.5;
-  if (roomInteriorRefs[idx]) roomInteriorRefs[idx].visible = true;
   roomLabels[idx].classList.add('visible');
-
   animateCamera(ROOM_CAM[idx].pos, ROOM_CAM[idx].target);
   setTimeout(() => showOverlay(idx), 800);
-
   document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.dataset.room) === idx);
   });
@@ -1594,11 +1554,13 @@ function resetView() {
   hideOverlay();
   // Restore all rooms to normal brightness
   for (let i = 0; i < NUM_ROOMS; i++) {
-    if (roomNeonMats[i]) roomNeonMats[i].color.setHex(NEON);
-    if (roomLights[i]) roomLights[i].intensity = 0.15;
-    if (roomGlowLights[i]) roomGlowLights[i].intensity = 0;
+    setRoomGroupOpacity(i, 1.0);
+    if (roomNeonMats[i]) roomNeonMats[i].color.setHex(NEON_BRIGHT);
+    if (roomLights[i]) roomLights[i].intensity = 3.0;
+    if (roomGlowLights[i]) roomGlowLights[i].intensity = 1.5;
     if (roomLabels[i]) roomLabels[i].classList.remove('visible');
-    if (roomInteriorRefs[i]) roomInteriorRefs[i].visible = false;
+    if (roomInteriorRefs[i]) setInteriorOpacity(roomInteriorRefs[i], 1.0);
+    if (roomGlowBoxes[i]) { roomGlowBoxes[i].color.setHex(NEON_BRIGHT); roomGlowBoxes[i].opacity = 0; }
   }
   selectedRoom = -1;
   animateCamera(OVERVIEW_POS, OVERVIEW_TARGET);
@@ -1704,7 +1666,7 @@ function buildFloorPanel() {
   ovBtn.className = 'overview';
   ovBtn.dataset.action = 'overview';
   ovBtn.textContent = '◎ Overview';
-  ovBtn.addEventListener('click', () => { lastInteraction = Date.now(); resetView(); });
+  ovBtn.addEventListener('click', () => { lastInteraction = Date.now(); resetView(); startAutoTour(); });
   panel.appendChild(ovBtn);
 
   // Room buttons grouped by floor (top floor first)
@@ -1719,7 +1681,7 @@ function buildFloorPanel() {
       const btn = document.createElement('button');
       btn.dataset.room = ri;
       btn.textContent = ROOM_INFO[ri].name;
-      btn.addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); focusRoom(ri); });
+      btn.addEventListener('click', () => { lastInteraction = Date.now(); focusRoom(ri); startAutoTourFrom(ri); });
       panel.appendChild(btn);
     });
   }
@@ -1860,7 +1822,7 @@ let autoTourIdx = 0;
 
 function getAutoTourOrder() {
   const order = [];
-  for (let fi = 0; fi < FLOOR_LAYOUT.length; fi++) {
+  for (let fi = FLOOR_LAYOUT.length - 1; fi >= 0; fi--) {
     FLOOR_LAYOUT[fi].forEach(ri => order.push(ri));
   }
   return order;
@@ -1869,13 +1831,34 @@ function getAutoTourOrder() {
 function startAutoTour() {
   clearInterval(autoTourInterval);
   const order = getAutoTourOrder();
-  autoTourIdx = 0;
-  // Focus first room immediately
-  focusRoom(order[0]);
+  autoTourIdx = -1; // start at -1 = overview
+  // Start with overview
+  resetView();
   autoTourInterval = setInterval(() => {
-    autoTourIdx = (autoTourIdx + 1) % order.length;
-    focusRoom(order[autoTourIdx]);
-  }, 5000);
+    autoTourIdx++;
+    if (autoTourIdx >= order.length) {
+      autoTourIdx = -1;
+      resetView();
+    } else {
+      focusRoom(order[autoTourIdx]);
+    }
+  }, 2000);
+}
+
+function startAutoTourFrom(roomIdx) {
+  clearInterval(autoTourInterval);
+  const order = getAutoTourOrder();
+  autoTourIdx = order.indexOf(roomIdx);
+  if (autoTourIdx < 0) autoTourIdx = 0;
+  autoTourInterval = setInterval(() => {
+    autoTourIdx++;
+    if (autoTourIdx >= order.length) {
+      autoTourIdx = -1;
+      resetView();
+    } else {
+      focusRoom(order[autoTourIdx]);
+    }
+  }, 2000);
 }
 
 function stopAutoTour() {
@@ -1975,10 +1958,12 @@ function animate() {
 
   // Subtle pulse on non-selected rooms
   const pulse = 0.02 * Math.sin(elapsed * 2);
-  const pb = COLOR_THEMES[activeTheme].pulseBase;
+  const br = ((NEON_BRIGHT >> 16) & 0xff) / 255;
+  const bg = ((NEON_BRIGHT >> 8) & 0xff) / 255;
+  const bb = (NEON_BRIGHT & 0xff) / 255;
   roomNeonMats.forEach((mat, i) => {
     if (i !== selectedRoom && i !== hoveredRoom) {
-      mat.color.setRGB(pb[0] + pulse*0.5, pb[1] + pulse*0.6, pb[2] + pulse);
+      mat.color.setRGB(br + pulse*0.5, bg + pulse*0.6, bb + pulse);
     }
   });
 
