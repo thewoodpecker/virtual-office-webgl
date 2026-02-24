@@ -429,10 +429,30 @@ function computePositions(preset) {
       cx += sz.w + ROOM_GAP;
     });
   });
+
+  // Compute overview camera from bounding box of all rooms
+  let minX = Infinity, maxX = -Infinity;
+  let minY = 0, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    const p = ROOM_POS[ri]; const sz = getRoomSize(ri);
+    minX = Math.min(minX, p.x - sz.w / 2);
+    maxX = Math.max(maxX, p.x + sz.w / 2);
+    maxY = Math.max(maxY, p.y + sz.h + SLAB_H);
+    minZ = Math.min(minZ, p.z - sz.d / 2);
+    maxZ = Math.max(maxZ, p.z + sz.d / 2);
+  }
+  const cx2 = (minX + maxX) / 2;
+  const cy2 = (minY + maxY) / 2;
+  const cz2 = (minZ + maxZ) / 2;
+  const extent = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+  const dist = extent * 1.1;
+  OVERVIEW_TARGET = new THREE.Vector3(cx2, cy2, cz2);
+  OVERVIEW_POS = new THREE.Vector3(cx2 + dist, cy2 + dist * 0.7, cz2 + dist);
 }
 
-const OVERVIEW_POS    = new THREE.Vector3(30, 20, 30);
-const OVERVIEW_TARGET = new THREE.Vector3(0, 10, 0);
+let OVERVIEW_POS    = new THREE.Vector3(30, 20, 30);
+let OVERVIEW_TARGET = new THREE.Vector3(0, 10, 0);
 
 /* ============================================================
    GLOBALS
@@ -1775,7 +1795,7 @@ function init() {
   controls.dampingFactor = 0.06;
   controls.target.copy(OVERVIEW_TARGET);
   controls.minDistance = 10;
-  controls.maxDistance = 80;
+  controls.maxDistance = 200;
   controls.maxPolarAngle = Math.PI * 0.48;
   controls.autoRotate = false;
   controls.autoRotateSpeed = 0.3;
