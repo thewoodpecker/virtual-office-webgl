@@ -94,7 +94,7 @@ canvas{display:block}
   flex:1;justify-content:center}
 #right-panel .export-section{flex-shrink:0;border-top:1px solid rgba(var(--accent),0.2)}
 #right-panel .panel-label{color:rgba(var(--accent),0.5);font-size:8px;letter-spacing:2px;
-  padding:4px 8px 1px;margin-top:12px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
+  padding:4px 8px 6px;margin-top:12px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
   border-top:1px solid rgba(var(--accent),0.08)}
 #right-panel .right-buttons .panel-label:first-child{margin-top:0;border-top:none}
 #right-panel button{background:transparent;border:none;border-bottom:1px solid rgba(var(--accent),0.1);
@@ -117,9 +117,10 @@ canvas{display:block}
 .dur-btn:hover{background:rgba(var(--accent),0.15);color:var(--bright-hex)}
 #dur-value{font-size:10px;color:var(--bright-hex);min-width:20px;text-align:center;
   font-family:'SF Mono',Consolas,monospace}
-.export-option{padding:2px 8px;font-size:9px;font-family:'SF Mono',Consolas,monospace;
-  color:rgba(var(--accent),0.5);display:flex;align-items:center}
-.export-option label{display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer;letter-spacing:.5px;pointer-events:auto}
+.export-option{padding:5px 8px;font-size:9px;font-family:'SF Mono',Consolas,monospace;
+  color:rgba(var(--accent),0.5);border-bottom:1px solid rgba(var(--accent),0.1);
+  letter-spacing:.5px;pointer-events:auto}
+.export-option label{display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer}
 .export-option input[type="checkbox"]{accent-color:var(--accent-hex);width:12px;height:12px;cursor:pointer}
 .export-btn{pointer-events:auto}
 .export-btn:disabled{opacity:0.3;cursor:not-allowed}
@@ -128,6 +129,19 @@ canvas{display:block}
   border:1.5px solid rgba(var(--accent),0.3);border-top-color:var(--bright-hex);
   border-radius:50%;margin-left:6px;animation:exspin 0.7s linear infinite;vertical-align:middle}
 @keyframes exspin{to{transform:rotate(360deg)}}
+
+/* ─── Recording indicator ─── */
+#rec-indicator{display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  z-index:200;align-items:center;gap:8px;padding:6px 16px;
+  background:rgba(2,3,8,0.85);border:1px solid rgba(255,60,60,0.4);backdrop-filter:blur(8px);
+  font-family:'SF Mono',Consolas,monospace;font-size:11px;letter-spacing:1px;color:#ff4444;
+  pointer-events:none}
+#rec-indicator.active{display:flex}
+#rec-indicator.downloaded{border-color:rgba(var(--accent),0.4);color:var(--bright-hex)}
+#rec-indicator .rec-dot{width:8px;height:8px;border-radius:50%;background:#ff4444;
+  animation:rec-blink 1s ease-in-out infinite}
+#rec-indicator.downloaded .rec-dot{background:var(--bright-hex);animation:none}
+@keyframes rec-blink{0%,100%{opacity:1}50%{opacity:0.2}}
 
 /* ─── INFO OVERLAY (tooltip) ─── */
 #info-overlay{display:none;position:fixed;left:0;top:0;
@@ -186,12 +200,13 @@ canvas{display:block}
 
   /* Corner brackets adjust */
   .hud-corner.tl,.hud-corner.tr{top:36px}
-  .hud-corner.bl,.hud-corner.br{bottom:18px}
-  #hud-frame .side-line.left{top:60px;bottom:40px}
-  #hud-frame .side-line.right{top:60px;bottom:40px}
+  .hud-corner.bl,.hud-corner.br{display:none}
+  #hud-frame .side-line.left{top:60px;bottom:0}
+  #hud-frame .side-line.right{top:60px;bottom:0}
 
   /* Floor panel — horizontal strip at bottom */
-  #floor-panel{position:fixed;top:auto;left:0;right:0;bottom:18px;
+  #hud-bottom{display:none}
+  #floor-panel{position:fixed;top:auto;left:0;right:0;bottom:0;
     width:100%;height:auto;flex-direction:row;
     border-right:none;border-top:1px solid var(--hud-border);
     background:linear-gradient(0deg,rgba(2,3,8,0.85) 0%,rgba(2,3,8,0.6) 100%);
@@ -278,28 +293,22 @@ canvas{display:block}
     <button class="theme-btn" data-theme="4">Phosphor</button>
     <button class="theme-btn" data-theme="5">Ghost Wire</button>
   </div>
-  <div class="export-section" style="display:none">
+  <div class="export-section">
     <div class="panel-label">Export</div>
-    <div class="export-duration" style="display:none">
-      <label>Per Room</label>
-      <div class="duration-control">
-        <button class="dur-btn" data-delta="-1">−</button>
-        <span id="dur-value">3s</span>
-        <button class="dur-btn" data-delta="1">+</button>
-      </div>
-    </div>
     <div class="export-option">
       <label>Roam Logo <input type="checkbox" id="export-logo" checked></label>
     </div>
-    <button class="export-btn" data-export="youtube">YouTube 4K</button>
-    <button class="export-btn" data-export="twitter">Twitter HD</button>
-    <button class="export-btn" data-export="tiktok">TikTok</button>
-    <button class="export-btn" data-export="reels">Reels</button>
-    <button class="export-btn" data-export="insta">Insta Post</button>
+    <div class="export-option">
+      <label>UI Overlay <input type="checkbox" id="export-ui-overlay"></label>
+    </div>
     <button class="export-btn" data-export="square">Square</button>
+    <button class="export-btn" data-export="landscape">1920x1080</button>
+    <button class="export-btn" data-export="portrait">1080x1920</button>
   </div>
   </div>
 </div>
+
+<div id="rec-indicator"><span class="rec-dot"></span><span id="rec-label">Recording...</span></div>
 
 <div id="info-overlay">
   <div class="floor-num" id="overlay-floor-num"></div>
@@ -1925,7 +1934,7 @@ function init() {
   camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 500);
   camera.position.copy(OVERVIEW_POS);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2073,14 +2082,11 @@ function stopAutoTour() {
    VIDEO EXPORT
    ============================================================ */
 const EXPORT_PRESETS = {
-  youtube: { w: 3840, h: 2160, name: 'youtube-4k' },
-  twitter: { w: 1920, h: 1080, name: 'twitter-hd' },
-  tiktok:  { w: 1080, h: 1920, name: 'tiktok' },
-  reels:   { w: 1080, h: 1920, name: 'reels' },
-  insta:   { w: 1080, h: 1350, name: 'insta-post' },
   square:  { w: 1080, h: 1080, name: 'square' },
+  landscape: { w: 1920, h: 1080, name: '1920x1080' },
+  portrait: { w: 1080, h: 1920, name: '1080x1920' },
 };
-let exportRoomDuration = 3;
+let exportRoomDuration = 2;
 let isRecording = false;
 
 function waitForCameraAnim() {
@@ -2101,46 +2107,124 @@ async function recordVideo(presetKey) {
   stopAutoTour();
   hideOverlay();
 
+  const recIndicator = document.getElementById('rec-indicator');
+  const recLabel = document.getElementById('rec-label');
+  recIndicator.classList.remove('downloaded');
+  recLabel.textContent = 'Recording...';
+  recIndicator.classList.add('active');
+
   const clickedBtn = document.querySelector(`.export-btn[data-export="${presetKey}"]`);
   clickedBtn.classList.add('exporting');
   document.querySelectorAll('.export-btn').forEach(b => b.disabled = true);
 
-  let capturing = false;
+  let recCapturing = false;
 
   try {
-    const includeLogo = document.getElementById('export-logo')?.checked ?? false;
-    const logoImg = (includeLogo && document.getElementById('hud-logo')) || null;
-
-    // Composite canvas copies each rendered frame from the main canvas
+    const includeUI = document.getElementById('export-ui-overlay')?.checked ?? false;
     const w = renderer.domElement.width;
     const h = renderer.domElement.height;
-    const recCanvas = document.createElement('canvas');
-    recCanvas.width = w;
-    recCanvas.height = h;
-    const recCtx = recCanvas.getContext('2d');
+    let stream, recCanvas, recCtx;
 
-    capturing = true;
-    function captureFrame() {
-      if (!capturing) return;
-      recCtx.drawImage(renderer.domElement, 0, 0);
-      if (logoImg?.complete) {
-        const lh = Math.round(h * 0.04);
-        const lw = Math.round(lh * (logoImg.naturalWidth / logoImg.naturalHeight));
-        recCtx.drawImage(logoImg, (w - lw) / 2, Math.round(h * 0.03), lw, lh);
+    if (includeUI) {
+      recCanvas = document.createElement('canvas');
+      recCanvas.width = w;
+      recCanvas.height = h;
+      recCtx = recCanvas.getContext('2d');
+      stream = recCanvas.captureStream(60);
+      recCapturing = true;
+
+      function drawUIOverlay() {
+        if (!recCapturing) return;
+        recCtx.drawImage(renderer.domElement, 0, 0);
+
+        // Read current theme colors from CSS
+        const cs = getComputedStyle(document.documentElement);
+        const accentRGB = cs.getPropertyValue('--accent').trim();
+        const accentHex = cs.getPropertyValue('--accent-hex').trim();
+        const brightHex = cs.getPropertyValue('--bright-hex').trim();
+
+        const topH = Math.round(h * 0.035);
+        const botH = Math.round(h * 0.016);
+        const leftW = Math.round(w * 0.078);
+        const fontSize = Math.max(8, Math.round(h * 0.008));
+        const labelFont = `${fontSize}px 'SF Mono', Consolas, monospace`;
+
+        // Top bar
+        recCtx.fillStyle = `rgba(2,3,8,0.75)`;
+        recCtx.fillRect(0, 0, w, topH);
+        recCtx.strokeStyle = `rgba(${accentRGB},0.25)`;
+        recCtx.lineWidth = 1;
+        recCtx.beginPath(); recCtx.moveTo(0, topH); recCtx.lineTo(w, topH); recCtx.stroke();
+        recCtx.font = labelFont;
+        recCtx.fillStyle = `rgba(${accentRGB},0.4)`;
+        recCtx.textBaseline = 'middle';
+        recCtx.fillText('ROAM VIRTUAL OFFICE', Math.round(w * 0.012), topH / 2);
+
+        // Bottom bar
+        recCtx.fillStyle = `rgba(2,3,8,0.65)`;
+        recCtx.fillRect(0, h - botH, w, botH);
+        recCtx.strokeStyle = `rgba(${accentRGB},0.25)`;
+        recCtx.beginPath(); recCtx.moveTo(0, h - botH); recCtx.lineTo(w, h - botH); recCtx.stroke();
+        recCtx.font = labelFont;
+        recCtx.fillStyle = `rgba(${accentRGB},0.3)`;
+        recCtx.textBaseline = 'middle';
+        recCtx.fillText('ROAM MAKES REMOTE WORK', Math.round(w * 0.012), h - botH / 2);
+        const rightText = 'FUTURE OF WORK';
+        const rightMetrics = recCtx.measureText(rightText);
+        recCtx.fillText(rightText, w - rightMetrics.width - Math.round(w * 0.012), h - botH / 2);
+
+        // Left panel
+        const grad = recCtx.createLinearGradient(0, 0, leftW, 0);
+        grad.addColorStop(0, 'rgba(2,3,8,0.55)');
+        grad.addColorStop(1, 'rgba(2,3,8,0)');
+        recCtx.fillStyle = grad;
+        recCtx.fillRect(0, topH, leftW, h - topH - botH);
+        recCtx.strokeStyle = `rgba(${accentRGB},0.15)`;
+        recCtx.beginPath(); recCtx.moveTo(leftW, topH); recCtx.lineTo(leftW, h - botH); recCtx.stroke();
+
+        // Floor labels in left panel
+        const btns = document.querySelectorAll('#floor-panel button[data-room]');
+        const btnCount = btns.length;
+        if (btnCount > 0) {
+          const areaH = h - topH - botH;
+          const startY = topH + (areaH - btnCount * Math.round(areaH / (btnCount + 2))) / 2;
+          const btnH = Math.round(areaH / (btnCount + 2));
+          recCtx.font = `${Math.max(7, Math.round(h * 0.007))}px 'SF Mono', Consolas, monospace`;
+          btns.forEach((btn, i) => {
+            const isActive = btn.classList.contains('active');
+            recCtx.fillStyle = isActive ? brightHex : `rgba(${accentRGB},0.45)`;
+            recCtx.textBaseline = 'middle';
+            recCtx.fillText(btn.textContent, Math.round(w * 0.008), startY + i * btnH + btnH / 2);
+          });
+        }
+
+        // Corner brackets
+        const cornerLen = Math.round(h * 0.018);
+        recCtx.strokeStyle = `rgba(${accentRGB},0.4)`;
+        recCtx.lineWidth = 1;
+        // top-left
+        recCtx.beginPath(); recCtx.moveTo(cornerLen, topH); recCtx.lineTo(0, topH); recCtx.lineTo(0, topH + cornerLen); recCtx.stroke();
+        // top-right
+        recCtx.beginPath(); recCtx.moveTo(w - cornerLen, topH); recCtx.lineTo(w, topH); recCtx.lineTo(w, topH + cornerLen); recCtx.stroke();
+        // bottom-left
+        recCtx.beginPath(); recCtx.moveTo(cornerLen, h - botH); recCtx.lineTo(0, h - botH); recCtx.lineTo(0, h - botH - cornerLen); recCtx.stroke();
+        // bottom-right
+        recCtx.beginPath(); recCtx.moveTo(w - cornerLen, h - botH); recCtx.lineTo(w, h - botH); recCtx.lineTo(w, h - botH - cornerLen); recCtx.stroke();
+
+        requestAnimationFrame(drawUIOverlay);
       }
-      requestAnimationFrame(captureFrame);
+      drawUIOverlay();
+    } else {
+      stream = renderer.domElement.captureStream(60);
     }
-    captureFrame();
 
-    // Prefer MP4, fall back to WebM
-    const stream = recCanvas.captureStream(60);
     const chunks = [];
     const mp4Ok = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1');
     const mimeType = mp4Ok ? 'video/mp4;codecs=avc1'
       : MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9'
       : 'video/webm';
     const fileExt = mp4Ok ? 'mp4' : 'webm';
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 20_000_000 });
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 40_000_000 });
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.start();
 
@@ -2162,7 +2246,7 @@ async function recordVideo(presetKey) {
     await waitSeconds(exportRoomDuration);
 
     // Finish recording
-    capturing = false;
+    recCapturing = false;
     await new Promise(resolve => { recorder.onstop = resolve; recorder.stop(); });
 
     // Trigger download
@@ -2173,10 +2257,19 @@ async function recordVideo(presetKey) {
     a.download = `roam-${preset.name}.${fileExt}`;
     a.click();
     URL.revokeObjectURL(url);
+
+    // Show downloaded state
+    recIndicator.classList.add('downloaded');
+    recLabel.textContent = 'Downloaded';
+    setTimeout(() => { recIndicator.classList.remove('active', 'downloaded'); }, 3000);
   } catch (err) {
     console.error('Export failed:', err);
+    recIndicator.classList.remove('downloaded');
+    recIndicator.classList.add('active');
+    recLabel.textContent = 'Export failed: ' + (err.message || err);
+    setTimeout(() => { recIndicator.classList.remove('active'); }, 6000);
   } finally {
-    capturing = false;
+    recCapturing = false;
     isRecording = false;
     clickedBtn.classList.remove('exporting');
     document.querySelectorAll('.export-btn').forEach(b => b.disabled = false);
