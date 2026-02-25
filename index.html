@@ -300,6 +300,9 @@ canvas{display:block}
     <button class="theme-btn" data-theme="7">Midnight Gold</button>
     <button class="theme-btn" data-theme="8">Toxic</button>
     <button class="theme-btn" data-theme="9">Deep Ocean</button>
+    <button class="theme-btn" data-theme="10">Blood Moon</button>
+    <button class="theme-btn" data-theme="11">Violet Haze</button>
+    <button class="theme-btn" data-theme="12">Ember</button>
   </div>
   <div class="export-section" style="display:none">
     <div class="panel-label">Export</div>
@@ -458,6 +461,36 @@ const COLOR_THEMES = [
     cssAccent:'32,208,208', cssAccentHex:'#20d0d0',
     cssBright:'100,238,238', cssBrightHex:'#64eeee',
     pulseBase:[0.04,0.09,0.09],
+  },
+  { // Blood Moon: Red/crimson
+    name:'Blood Moon',
+    neon:0x180a0a, gold:0x993333, bright:0xee4444, warm:0x996666,
+    gridMinor:0x331515, gridMajor:0x662a2a, gridGlow:0x552222,
+    screenStroke:'#aa3333', glowLight:0xaa4444,
+    bikeColors:[0xff3333,0xee2222,0xcc1111,0xff5544,0xdd3322,0xbb2211],
+    cssAccent:'224,64,64', cssAccentHex:'#e04040',
+    cssBright:'248,140,140', cssBrightHex:'#f88c8c',
+    pulseBase:[0.09,0.04,0.04],
+  },
+  { // Violet Haze: Purple/violet
+    name:'Violet Haze',
+    neon:0x140a18, gold:0x663399, bright:0x9955ee, warm:0x886699,
+    gridMinor:0x281533, gridMajor:0x502a66, gridGlow:0x442255,
+    screenStroke:'#773399', glowLight:0x8844aa,
+    bikeColors:[0x9944ff,0xaa55ff,0x8833dd,0xbb66ff,0x7733cc,0x9955ee],
+    cssAccent:'160,80,224', cssAccentHex:'#a050e0',
+    cssBright:'200,160,248', cssBrightHex:'#c8a0f8',
+    pulseBase:[0.07,0.04,0.09],
+  },
+  { // Ember: Orange/amber
+    name:'Ember',
+    neon:0x181008, gold:0x995522, bright:0xee7733, warm:0x997755,
+    gridMinor:0x332210, gridMajor:0x664420, gridGlow:0x553818,
+    screenStroke:'#aa6622', glowLight:0xaa6622,
+    bikeColors:[0xff7722,0xee8833,0xdd6611,0xff9944,0xcc6622,0xee7711],
+    cssAccent:'224,128,32', cssAccentHex:'#e08020',
+    cssBright:'248,180,100', cssBrightHex:'#f8b464',
+    pulseBase:[0.09,0.06,0.03],
   },
 ];
 let activeTheme = 6;
