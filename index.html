@@ -81,9 +81,13 @@ canvas{display:block}
   letter-spacing:2px;padding:4px 10px 1px;margin-top:12px;
   font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
   border-top:1px solid rgba(var(--accent),0.08)}
-#autoplay-toggle{flex-shrink:0;border-top:1px solid rgba(var(--accent),0.2);
-  border-bottom:none;color:var(--bright-hex);background:rgba(var(--accent),0.08);
-  font-weight:600;letter-spacing:1px}
+#autoplay-toggle{position:fixed;bottom:22px;left:0;width:150px;z-index:51;
+  border:none;border-top:1px solid rgba(var(--accent),0.2);
+  color:var(--bright-hex);background:rgba(var(--accent),0.08);
+  padding:6px 10px;cursor:pointer;font-size:10px;text-align:left;
+  font-family:'SF Mono',Consolas,monospace;font-weight:600;letter-spacing:1px;
+  pointer-events:auto;transition:all .25s}
+#autoplay-toggle:hover{color:var(--accent-hex);background:rgba(var(--accent),0.15)}
 
 /* ─── RIGHT PANEL ─── */
 #right-panel{position:fixed;top:48px;right:0;bottom:22px;z-index:50;
@@ -1985,7 +1989,10 @@ function buildFloorPanel() {
       startAutoTour();
     }
   });
-  panel.appendChild(autoBtn);
+  // Remove old autoplay button if it exists, then append to body (not panel)
+  const oldAuto = document.getElementById('autoplay-toggle');
+  if (oldAuto) oldAuto.remove();
+  document.body.appendChild(autoBtn);
 }
 
 /* ============================================================
