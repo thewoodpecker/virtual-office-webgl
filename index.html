@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --accent:80,144,224;--accent-hex:#5090e0;
-  --bright:138,180,248;--bright-hex:#8ab4f8;
+  --accent:160,160,160;--accent-hex:#a0a0a0;
+  --bright:200,200,200;--bright-hex:#c8c8c8;
   --hud-bg:rgba(2,3,8,0.7);
   --hud-border:rgba(var(--accent),0.25);
   --hud-line:rgba(var(--accent),0.12);
@@ -291,13 +291,31 @@ canvas{display:block}
     <button data-layout="5">Skyscraper</button>
     <button data-layout="6">Split</button>
     <button data-layout="7">Spiral</button>
+    <button data-layout="8">Diamond</button>
+    <button data-layout="9">Orbit</button>
+    <button data-layout="10">Helix</button>
     <div class="panel-label">Color</div>
-    <button class="theme-btn active" data-theme="0">Neon Flux</button>
+    <button class="theme-btn" data-theme="0">Neon Flux</button>
     <button class="theme-btn" data-theme="1">Solar Forge</button>
     <button class="theme-btn" data-theme="2">Synth Wave</button>
     <button class="theme-btn" data-theme="3">Ice Circuit</button>
     <button class="theme-btn" data-theme="4">Phosphor</button>
     <button class="theme-btn" data-theme="5">Ghost Wire</button>
+    <button class="theme-btn active" data-theme="6">Ghost Gold</button>
+    <button class="theme-btn" data-theme="7">Midnight Gold</button>
+    <button class="theme-btn" data-theme="8">Toxic</button>
+    <button class="theme-btn" data-theme="9">Deep Ocean</button>
+  </div>
+  <div class="export-section" style="display:none">
+    <div class="panel-label">Export</div>
+    <div class="export-option">
+      <label>Roam Logo <input type="checkbox" id="export-logo" checked></label>
+    </div>
+    <div class="export-option">
+      <label>UI Overlay <input type="checkbox" id="export-ui-overlay"></label>
+    </div>
+    <button class="export-btn" data-export="mp4">MP4</button>
+    <button class="export-btn" id="export-png">PNG</button>
   </div>
   </div>
 </div>
@@ -328,6 +346,11 @@ canvas{display:block}
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// Preload logo for export (CORS-safe)
+const exportLogoImg = new Image();
+exportLogoImg.crossOrigin = 'anonymous';
+exportLogoImg.src = 'roam-logo.png';
 
 /* ============================================================
    CONSTANTS
@@ -401,8 +424,48 @@ const COLOR_THEMES = [
     cssBright:'200,200,200', cssBrightHex:'#c8c8c8',
     pulseBase:[0.07,0.07,0.07],
   },
+  { // Ghost Gold: Ghost Wire UI + gold building
+    name:'Ghost Gold',
+    neon:0x181810, gold:0x997722, bright:0xddaa33, warm:0x998866,
+    gridMinor:0x282828, gridMajor:0x4a4a4a, gridGlow:0x3a3a3a,
+    screenStroke:'#aa8822', glowLight:0x886622,
+    bikeColors:[0x888888,0x999999,0x777777,0xaaaaaa,0x666666,0x888888],
+    cssAccent:'160,160,160', cssAccentHex:'#a0a0a0',
+    cssBright:'200,200,200', cssBrightHex:'#c8c8c8',
+    pulseBase:[0.09,0.07,0.04],
+  },
+  { // Midnight Gold: Blue UI + gold building
+    name:'Midnight Gold',
+    neon:0x181810, gold:0x997722, bright:0xddaa33, warm:0x998866,
+    gridMinor:0x1a3366, gridMajor:0x2a5599, gridGlow:0x2255aa,
+    screenStroke:'#aa8822', glowLight:0x886622,
+    bikeColors:[0x3399ff,0x44bbff,0x2277dd,0x55aaff,0x2288ee,0x3399cc],
+    cssAccent:'80,144,224', cssAccentHex:'#5090e0',
+    cssBright:'138,180,248', cssBrightHex:'#8ab4f8',
+    pulseBase:[0.09,0.07,0.04],
+  },
+  { // Toxic: Green UI + magenta building
+    name:'Toxic',
+    neon:0x180a14, gold:0x993366, bright:0xee55aa, warm:0x996688,
+    gridMinor:0x153315, gridMajor:0x2a662a, gridGlow:0x225522,
+    screenStroke:'#aa3377', glowLight:0xaa4488,
+    bikeColors:[0x33dd33,0x44ee44,0x22bb22,0x55cc55,0x33aa33,0x44bb44],
+    cssAccent:'64,221,64', cssAccentHex:'#40dd40',
+    cssBright:'140,248,140', cssBrightHex:'#8cf88c',
+    pulseBase:[0.09,0.04,0.07],
+  },
+  { // Deep Ocean: Cyan UI + blue building
+    name:'Deep Ocean',
+    neon:0x111118, gold:0x3366aa, bright:0x5599ee, warm:0x667799,
+    gridMinor:0x153333, gridMajor:0x2a6666, gridGlow:0x225555,
+    screenStroke:'#3366aa', glowLight:0x4488cc,
+    bikeColors:[0x22dddd,0x33eeee,0x11bbbb,0x44cccc,0x22aaaa,0x33bbbb],
+    cssAccent:'32,208,208', cssAccentHex:'#20d0d0',
+    cssBright:'100,238,238', cssBrightHex:'#64eeee',
+    pulseBase:[0.04,0.09,0.09],
+  },
 ];
-let activeTheme = 0;
+let activeTheme = 6;
 
 const SLAB_H = 0.3;
 const ROOM_GAP = 1.0;
@@ -511,6 +574,47 @@ const LAYOUT_PRESETS = [
       {dx:0, dz:3},{dx:3, dz:0},{dx:0, dz:-3},{dx:-3, dz:0},
       {dx:0, dz:3},{dx:3, dz:0},{dx:0, dz:-3},{dx:-3, dz:0},
     ],
+  },
+  { // Diamond: 4 floors in a diamond shape (1-3-3-1)
+    name: 'Diamond',
+    floors: [[6],[0,3,4],[1,2,7],[5]],
+    offsets: [
+      {dx:0, dz:0},{dx:0, dz:0},{dx:0, dz:0},
+      {dx:0, dz:0},{dx:0, dz:0},
+      {dx:0, dz:0},
+      {dx:0, dz:0},{dx:0, dz:0},
+    ],
+  },
+  { // Orbit: rooms arranged in a circle on one floor, spaced around a central point
+    name: 'Orbit',
+    floors: [[0,1,2,3,4,5,6,7]],
+    uniformSize: { w: 8, d: 8, h: 5 },
+    offsets: (() => {
+      // Pre-compute linear positions to cancel them out
+      const sz = 8, gap = 1.0, n = 8;
+      const totalW = n * sz + (n - 1) * gap;
+      const linX = [];
+      let cx = -totalW / 2;
+      for (let i = 0; i < n; i++) { linX.push(cx + sz / 2); cx += sz + gap; }
+      const r = 13;
+      return Array.from({length: n}, (_, i) => {
+        const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+        return {dx: Math.cos(a) * r - linX[i], dz: Math.sin(a) * r};
+      });
+    })(),
+  },
+  { // Helix: double spiral — two interleaved columns rotating in opposite directions
+    name: 'Helix',
+    floors: [[0,1],[2,3],[4,5],[6,7]],
+    offsets: (() => {
+      const r = 5;
+      const offsets = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.floor(i / 2) / 4) * Math.PI * 2 + (i % 2 === 0 ? 0 : Math.PI);
+        offsets.push({dx: Math.cos(a) * r, dz: Math.sin(a) * r});
+      }
+      return offsets;
+    })(),
   },
 ];
 
@@ -1965,6 +2069,7 @@ function init() {
   createBuilding();
   buildFloorPanel();
   createEnvironment();
+  applyTheme(6);
 
   // Event listeners
   renderer.domElement.addEventListener('pointermove', onPointerMove);
@@ -1999,6 +2104,8 @@ function init() {
   document.querySelectorAll('.export-btn').forEach(btn => {
     btn.addEventListener('click', () => recordVideo(btn.dataset.export));
   });
+
+  document.getElementById('export-png').addEventListener('click', exportPNG);
 
   // Mobile settings toggle
   document.getElementById('mobile-settings-btn').addEventListener('click', () => {
@@ -2086,12 +2193,116 @@ function stopAutoTour() {
    VIDEO EXPORT
    ============================================================ */
 const EXPORT_PRESETS = {
-  square:  { w: 1920, h: 1920, name: 'square' },
-  landscape: { w: 1920, h: 1080, name: '1920x1080' },
-  portrait: { w: 1080, h: 1920, name: '1080x1920' },
+  mp4: { w: 1920, h: 1080, name: 'roam-office' },
 };
 let exportRoomDuration = 2;
 let isRecording = false;
+
+function drawExportOverlays(ctx, w, h) {
+  const includeLogo = document.getElementById('export-logo')?.checked ?? false;
+  const includeUI = document.getElementById('export-ui-overlay')?.checked ?? false;
+
+  if (includeUI) {
+    const cs = getComputedStyle(document.documentElement);
+    const accentRGB = cs.getPropertyValue('--accent').trim();
+    const brightHex = cs.getPropertyValue('--bright-hex').trim();
+    const topH = Math.round(h * 0.035);
+    const botH = Math.round(h * 0.016);
+    const leftW = Math.round(w * 0.078);
+    const fontSize = Math.max(8, Math.round(h * 0.008));
+    const labelFont = `${fontSize}px 'SF Mono', Consolas, monospace`;
+
+    // Top bar
+    ctx.fillStyle = 'rgba(2,3,8,0.75)';
+    ctx.fillRect(0, 0, w, topH);
+    ctx.strokeStyle = `rgba(${accentRGB},0.25)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, topH); ctx.lineTo(w, topH); ctx.stroke();
+    ctx.font = labelFont;
+    ctx.fillStyle = `rgba(${accentRGB},0.4)`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ROAM VIRTUAL OFFICE', Math.round(w * 0.012), topH / 2);
+
+    // Bottom bar
+    ctx.fillStyle = 'rgba(2,3,8,0.65)';
+    ctx.fillRect(0, h - botH, w, botH);
+    ctx.strokeStyle = `rgba(${accentRGB},0.25)`;
+    ctx.beginPath(); ctx.moveTo(0, h - botH); ctx.lineTo(w, h - botH); ctx.stroke();
+    ctx.font = labelFont;
+    ctx.fillStyle = `rgba(${accentRGB},0.3)`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ROAM MAKES REMOTE WORK', Math.round(w * 0.012), h - botH / 2);
+    const rightText = 'FUTURE OF WORK';
+    const rm = ctx.measureText(rightText);
+    ctx.fillText(rightText, w - rm.width - Math.round(w * 0.012), h - botH / 2);
+
+    // Left panel
+    const grad = ctx.createLinearGradient(0, 0, leftW, 0);
+    grad.addColorStop(0, 'rgba(2,3,8,0.55)');
+    grad.addColorStop(1, 'rgba(2,3,8,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, topH, leftW, h - topH - botH);
+    ctx.strokeStyle = `rgba(${accentRGB},0.15)`;
+    ctx.beginPath(); ctx.moveTo(leftW, topH); ctx.lineTo(leftW, h - botH); ctx.stroke();
+
+    // Floor labels
+    const btns = document.querySelectorAll('#floor-panel button[data-room]');
+    if (btns.length > 0) {
+      const areaH = h - topH - botH;
+      const btnH = Math.round(areaH / (btns.length + 2));
+      const startY = topH + (areaH - btns.length * btnH) / 2;
+      ctx.font = `${Math.max(7, Math.round(h * 0.007))}px 'SF Mono', Consolas, monospace`;
+      btns.forEach((btn, i) => {
+        ctx.fillStyle = btn.classList.contains('active') ? brightHex : `rgba(${accentRGB},0.45)`;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(btn.textContent, Math.round(w * 0.008), startY + i * btnH + btnH / 2);
+      });
+    }
+
+    // Corner brackets
+    const cornerLen = Math.round(h * 0.018);
+    ctx.strokeStyle = `rgba(${accentRGB},0.4)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cornerLen, topH); ctx.lineTo(0, topH); ctx.lineTo(0, topH + cornerLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - cornerLen, topH); ctx.lineTo(w, topH); ctx.lineTo(w, topH + cornerLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cornerLen, h - botH); ctx.lineTo(0, h - botH); ctx.lineTo(0, h - botH - cornerLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - cornerLen, h - botH); ctx.lineTo(w, h - botH); ctx.lineTo(w, h - botH - cornerLen); ctx.stroke();
+  }
+
+  if (includeLogo && exportLogoImg?.complete) {
+    const lh = Math.round(h * 0.04);
+    const lw = Math.round(lh * (exportLogoImg.naturalWidth / exportLogoImg.naturalHeight));
+    ctx.drawImage(exportLogoImg, (w - lw) / 2, Math.round(h * 0.03), lw, lh);
+  }
+}
+
+function exportPNG() {
+  if (isRecording) return;
+  const w = 1920, h = 1080;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = w;
+  outCanvas.height = h;
+  const ctx = outCanvas.getContext('2d');
+  ctx.drawImage(renderer.domElement, 0, 0);
+  drawExportOverlays(ctx, w, h);
+
+  outCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'roam-office.png';
+    a.click();
+    URL.revokeObjectURL(url);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  }, 'image/png');
+}
 
 function waitForCameraAnim() {
   return new Promise(resolve => {
@@ -2124,7 +2335,7 @@ async function recordVideo(presetKey) {
   let recCapturing = false;
 
   try {
-    const includeUI = document.getElementById('export-ui-overlay')?.checked ?? false;
+    const needsComposite = document.getElementById('export-ui-overlay')?.checked || document.getElementById('export-logo')?.checked;
     const ew = preset.w;
     const eh = preset.h;
 
@@ -2137,7 +2348,7 @@ async function recordVideo(presetKey) {
     const h = eh;
     let stream, recCanvas, recCtx;
 
-    if (includeUI) {
+    if (needsComposite) {
       recCanvas = document.createElement('canvas');
       recCanvas.width = w;
       recCanvas.height = h;
@@ -2145,87 +2356,13 @@ async function recordVideo(presetKey) {
       stream = recCanvas.captureStream(60);
       recCapturing = true;
 
-      function drawUIOverlay() {
+      function drawCompositeFrame() {
         if (!recCapturing) return;
         recCtx.drawImage(renderer.domElement, 0, 0);
-
-        // Read current theme colors from CSS
-        const cs = getComputedStyle(document.documentElement);
-        const accentRGB = cs.getPropertyValue('--accent').trim();
-        const accentHex = cs.getPropertyValue('--accent-hex').trim();
-        const brightHex = cs.getPropertyValue('--bright-hex').trim();
-
-        const topH = Math.round(h * 0.035);
-        const botH = Math.round(h * 0.016);
-        const leftW = Math.round(w * 0.078);
-        const fontSize = Math.max(8, Math.round(h * 0.008));
-        const labelFont = `${fontSize}px 'SF Mono', Consolas, monospace`;
-
-        // Top bar
-        recCtx.fillStyle = `rgba(2,3,8,0.75)`;
-        recCtx.fillRect(0, 0, w, topH);
-        recCtx.strokeStyle = `rgba(${accentRGB},0.25)`;
-        recCtx.lineWidth = 1;
-        recCtx.beginPath(); recCtx.moveTo(0, topH); recCtx.lineTo(w, topH); recCtx.stroke();
-        recCtx.font = labelFont;
-        recCtx.fillStyle = `rgba(${accentRGB},0.4)`;
-        recCtx.textBaseline = 'middle';
-        recCtx.fillText('ROAM VIRTUAL OFFICE', Math.round(w * 0.012), topH / 2);
-
-        // Bottom bar
-        recCtx.fillStyle = `rgba(2,3,8,0.65)`;
-        recCtx.fillRect(0, h - botH, w, botH);
-        recCtx.strokeStyle = `rgba(${accentRGB},0.25)`;
-        recCtx.beginPath(); recCtx.moveTo(0, h - botH); recCtx.lineTo(w, h - botH); recCtx.stroke();
-        recCtx.font = labelFont;
-        recCtx.fillStyle = `rgba(${accentRGB},0.3)`;
-        recCtx.textBaseline = 'middle';
-        recCtx.fillText('ROAM MAKES REMOTE WORK', Math.round(w * 0.012), h - botH / 2);
-        const rightText = 'FUTURE OF WORK';
-        const rightMetrics = recCtx.measureText(rightText);
-        recCtx.fillText(rightText, w - rightMetrics.width - Math.round(w * 0.012), h - botH / 2);
-
-        // Left panel
-        const grad = recCtx.createLinearGradient(0, 0, leftW, 0);
-        grad.addColorStop(0, 'rgba(2,3,8,0.55)');
-        grad.addColorStop(1, 'rgba(2,3,8,0)');
-        recCtx.fillStyle = grad;
-        recCtx.fillRect(0, topH, leftW, h - topH - botH);
-        recCtx.strokeStyle = `rgba(${accentRGB},0.15)`;
-        recCtx.beginPath(); recCtx.moveTo(leftW, topH); recCtx.lineTo(leftW, h - botH); recCtx.stroke();
-
-        // Floor labels in left panel
-        const btns = document.querySelectorAll('#floor-panel button[data-room]');
-        const btnCount = btns.length;
-        if (btnCount > 0) {
-          const areaH = h - topH - botH;
-          const startY = topH + (areaH - btnCount * Math.round(areaH / (btnCount + 2))) / 2;
-          const btnH = Math.round(areaH / (btnCount + 2));
-          recCtx.font = `${Math.max(7, Math.round(h * 0.007))}px 'SF Mono', Consolas, monospace`;
-          btns.forEach((btn, i) => {
-            const isActive = btn.classList.contains('active');
-            recCtx.fillStyle = isActive ? brightHex : `rgba(${accentRGB},0.45)`;
-            recCtx.textBaseline = 'middle';
-            recCtx.fillText(btn.textContent, Math.round(w * 0.008), startY + i * btnH + btnH / 2);
-          });
-        }
-
-        // Corner brackets
-        const cornerLen = Math.round(h * 0.018);
-        recCtx.strokeStyle = `rgba(${accentRGB},0.4)`;
-        recCtx.lineWidth = 1;
-        // top-left
-        recCtx.beginPath(); recCtx.moveTo(cornerLen, topH); recCtx.lineTo(0, topH); recCtx.lineTo(0, topH + cornerLen); recCtx.stroke();
-        // top-right
-        recCtx.beginPath(); recCtx.moveTo(w - cornerLen, topH); recCtx.lineTo(w, topH); recCtx.lineTo(w, topH + cornerLen); recCtx.stroke();
-        // bottom-left
-        recCtx.beginPath(); recCtx.moveTo(cornerLen, h - botH); recCtx.lineTo(0, h - botH); recCtx.lineTo(0, h - botH - cornerLen); recCtx.stroke();
-        // bottom-right
-        recCtx.beginPath(); recCtx.moveTo(w - cornerLen, h - botH); recCtx.lineTo(w, h - botH); recCtx.lineTo(w, h - botH - cornerLen); recCtx.stroke();
-
-        requestAnimationFrame(drawUIOverlay);
+        drawExportOverlays(recCtx, w, h);
+        requestAnimationFrame(drawCompositeFrame);
       }
-      drawUIOverlay();
+      drawCompositeFrame();
     } else {
       stream = renderer.domElement.captureStream(60);
     }
