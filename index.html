@@ -1703,6 +1703,9 @@ function focusRoom(idx) {
   if (!isRecording) setTimeout(() => showOverlay(idx), 800);
   document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.dataset.room) === idx);
+    if (parseInt(btn.dataset.room) === idx) {
+      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   });
 }
 
