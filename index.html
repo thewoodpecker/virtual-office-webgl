@@ -9,8 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --accent:212,160,32;--accent-hex:#d4a020;
-  --bright:238,204,100;--bright-hex:#eecc64;
+  --accent:80,144,224;--accent-hex:#5090e0;
+  --bright:138,180,248;--bright-hex:#8ab4f8;
   --hud-bg:rgba(2,3,8,0.7);
   --hud-border:rgba(var(--accent),0.25);
   --hud-line:rgba(var(--accent),0.12);
@@ -292,24 +292,12 @@ canvas{display:block}
     <button data-layout="6">Split</button>
     <button data-layout="7">Spiral</button>
     <div class="panel-label">Color</div>
-    <button class="theme-btn" data-theme="0">Neon Flux</button>
-    <button class="theme-btn active" data-theme="1">Solar Forge</button>
+    <button class="theme-btn active" data-theme="0">Neon Flux</button>
+    <button class="theme-btn" data-theme="1">Solar Forge</button>
     <button class="theme-btn" data-theme="2">Synth Wave</button>
     <button class="theme-btn" data-theme="3">Ice Circuit</button>
     <button class="theme-btn" data-theme="4">Phosphor</button>
     <button class="theme-btn" data-theme="5">Ghost Wire</button>
-  </div>
-  <div class="export-section">
-    <div class="panel-label">Export</div>
-    <div class="export-option">
-      <label>Roam Logo <input type="checkbox" id="export-logo" checked></label>
-    </div>
-    <div class="export-option">
-      <label>UI Overlay <input type="checkbox" id="export-ui-overlay"></label>
-    </div>
-    <button class="export-btn" data-export="square">Square</button>
-    <button class="export-btn" data-export="landscape">1920x1080</button>
-    <button class="export-btn" data-export="portrait">1080x1920</button>
   </div>
   </div>
 </div>
@@ -414,7 +402,7 @@ const COLOR_THEMES = [
     pulseBase:[0.07,0.07,0.07],
   },
 ];
-let activeTheme = 1;
+let activeTheme = 0;
 
 const SLAB_H = 0.3;
 const ROOM_GAP = 1.0;
