@@ -223,8 +223,10 @@ canvas{display:block}
   #floor-panel button{width:100%;white-space:nowrap;padding:8px 10px;
     font-size:9px;border-bottom:1px solid rgba(var(--accent),0.1);border-right:none;
     flex-shrink:0;text-align:left}
-  #autoplay-toggle{border-top:1px solid rgba(var(--accent),0.2);border-right:none;
-    flex-shrink:0}
+  #autoplay-toggle{position:fixed;bottom:0;left:0;width:100%;z-index:105;
+    border-top:1px solid rgba(var(--accent),0.2);border-right:none;
+    background:rgba(2,3,8,0.92);backdrop-filter:blur(8px);
+    padding:10px 10px;font-size:11px;text-align:center;pointer-events:auto}
 
   /* Toggle buttons visible on mobile */
   #mobile-settings-btn{display:flex;top:40px}
@@ -237,8 +239,8 @@ canvas{display:block}
     border-left:1px solid var(--hud-border)}
   #right-panel.open{transform:translateX(0)}
 
-  /* Info overlay — full-width, pinned at bottom */
-  #info-overlay{left:0!important;right:0;top:auto!important;bottom:0;
+  /* Info overlay — full-width, pinned above auto-tour button */
+  #info-overlay{left:0!important;right:0;top:auto!important;bottom:40px;
     transform:none;max-width:100%;width:100%;border-left:none;border-right:none}
 
   /* 3D labels smaller */
@@ -344,6 +346,7 @@ canvas{display:block}
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Preload logo for export (CORS-safe)
 const exportLogoImg = new Image();
@@ -679,6 +682,7 @@ let roadSurfaceMats = [], roadEdgeMats = [], roadCenterMat;
 const bikeMats = []; // per-vehicle array of { strip, glow, trail, groundGlow }
 
 let hoveredRoom = -1, selectedRoom = -1;
+let mouseMoved = false;
 let lastInteraction = Date.now();
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2();
@@ -701,6 +705,8 @@ const layoutAnim = {
 };
 
 let frameCount = 0, lastFpsTime = performance.now();
+let lastPulseQuant = -999;
+const fpsEl = document.getElementById('fps-counter');
 
 /* ============================================================
    HELPERS
@@ -824,7 +830,6 @@ function addScreen(group, type, w, h, x, iy, z, rotY) {
 
 function makeInteriorEdges(w, h, d, mat) { return makeNeonEdges(w, h, d, mat, TUBE_T_INTERIOR); }
 function makeNeonEdges(w, h, d, mat, thickness) {
-  const g = new THREE.Group();
   const hw=w/2, hh=h/2, hd=d/2, t=thickness||TUBE_T;
   const edges = [
     {s:[w+t,t,t],p:[0,-hh,hd]},{s:[w+t,t,t],p:[0,-hh,-hd]},
@@ -834,11 +839,15 @@ function makeNeonEdges(w, h, d, mat, thickness) {
     {s:[t,h,t],p:[-hw,0,hd]},{s:[t,h,t],p:[hw,0,hd]},
     {s:[t,h,t],p:[-hw,0,-hd]},{s:[t,h,t],p:[hw,0,-hd]},
   ];
-  edges.forEach(e => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(...e.s), mat);
-    m.position.set(...e.p); g.add(m);
+  const geos = edges.map(e => {
+    const g = new THREE.BoxGeometry(...e.s);
+    g.translate(...e.p);
+    return g;
   });
-  return g;
+  const merged = mergeGeometries(geos);
+  geos.forEach(g => g.dispose());
+  const mesh = new THREE.Mesh(merged, mat);
+  return mesh;
 }
 
 /* ============================================================
@@ -866,7 +875,18 @@ function setRoomGroupOpacity(roomIdx, opacity) {
 function clearBuilding() {
   // Remove old label DOM elements from CSS2D renderer container
   roomLabels.forEach(lbl => { if (lbl && lbl.parentNode) lbl.parentNode.removeChild(lbl); });
-  roomGroupRefs.forEach(g => { if (g) scene.remove(g); });
+  // Dispose GPU resources before removing from scene
+  roomGroupRefs.forEach(g => {
+    if (!g) return;
+    g.traverse(c => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) {
+        if (c.material.map) c.material.map.dispose();
+        c.material.dispose();
+      }
+    });
+    scene.remove(g);
+  });
   roomGroupRefs.length = 0;
   roomGlassMeshes.length = 0;
   roomNeonMats.length = 0;
@@ -1484,6 +1504,8 @@ function createEnvironment() {
   );
   ground.rotation.x = -Math.PI/2;
   ground.position.y = -0.02;
+  ground.matrixAutoUpdate = false;
+  ground.updateMatrix();
   scene.add(ground);
 
   // Tron grid
@@ -1529,6 +1551,8 @@ function createTronGrid() {
     );
     strip.rotation.x = -Math.PI/2;
     strip.position.set(x, 0.01, z);
+    strip.matrixAutoUpdate = false;
+    strip.updateMatrix();
     scene.add(strip);
   });
 }
@@ -1556,50 +1580,70 @@ function createRoads() {
   // --- Road X (z=20) ---
   const roadX = new THREE.Mesh(new THREE.PlaneGeometry(120, 6), surfMat1);
   roadX.rotation.x = -Math.PI/2; roadX.position.set(0, 0.01, 20);
+  roadX.matrixAutoUpdate = false; roadX.updateMatrix();
   scene.add(roadX);
 
   // Outer edge glow strips (wide faint)
   [-3, 3].forEach(off => {
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(120, 0.5), makeEdgeMat(0.08));
     glow.rotation.x = -Math.PI/2; glow.position.set(0, 0.015, 20 + off);
+    glow.matrixAutoUpdate = false; glow.updateMatrix();
     scene.add(glow);
   });
   // Outer edge lines (sharp bright)
   [-3, 3].forEach(off => {
     const line = new THREE.Mesh(new THREE.PlaneGeometry(120, 0.08), makeEdgeMat(0.6));
     line.rotation.x = -Math.PI/2; line.position.set(0, 0.02, 20 + off);
+    line.matrixAutoUpdate = false; line.updateMatrix();
     scene.add(line);
   });
-  // Center dashes
+  // Center dashes (merged into single geometry)
+  const dashXGeos = [];
   for (let dx = -60; dx < 60; dx += 4) {
-    const dash = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.05), roadCenterMat);
-    dash.rotation.x = -Math.PI/2; dash.position.set(dx, 0.02, 20);
-    scene.add(dash);
+    const g = new THREE.PlaneGeometry(1.5, 0.05);
+    g.rotateX(-Math.PI/2);
+    g.translate(dx, 0.02, 20);
+    dashXGeos.push(g);
   }
+  const dashXMerged = new THREE.Mesh(mergeGeometries(dashXGeos), roadCenterMat);
+  dashXGeos.forEach(g => g.dispose());
+  dashXMerged.matrixAutoUpdate = false;
+  dashXMerged.updateMatrix();
+  scene.add(dashXMerged);
 
   // --- Road Z (x=42) ---
   const roadZ = new THREE.Mesh(new THREE.PlaneGeometry(6, 120), surfMat2);
   roadZ.rotation.x = -Math.PI/2; roadZ.position.set(42, 0.01, 0);
+  roadZ.matrixAutoUpdate = false; roadZ.updateMatrix();
   scene.add(roadZ);
 
   // Outer edge glow strips
   [-3, 3].forEach(off => {
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 120), makeEdgeMat(0.08));
     glow.rotation.x = -Math.PI/2; glow.position.set(42 + off, 0.015, 0);
+    glow.matrixAutoUpdate = false; glow.updateMatrix();
     scene.add(glow);
   });
   // Outer edge lines
   [-3, 3].forEach(off => {
     const line = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 120), makeEdgeMat(0.6));
     line.rotation.x = -Math.PI/2; line.position.set(42 + off, 0.02, 0);
+    line.matrixAutoUpdate = false; line.updateMatrix();
     scene.add(line);
   });
-  // Center dashes
+  // Center dashes (merged into single geometry)
+  const dashZGeos = [];
   for (let dz = -60; dz < 60; dz += 4) {
-    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 1.5), roadCenterMat);
-    dash.rotation.x = -Math.PI/2; dash.position.set(42, 0.02, dz);
-    scene.add(dash);
+    const g = new THREE.PlaneGeometry(0.05, 1.5);
+    g.rotateX(-Math.PI/2);
+    g.translate(42, 0.02, dz);
+    dashZGeos.push(g);
   }
+  const dashZMerged = new THREE.Mesh(mergeGeometries(dashZGeos), roadCenterMat);
+  dashZGeos.forEach(g => g.dispose());
+  dashZMerged.matrixAutoUpdate = false;
+  dashZMerged.updateMatrix();
+  scene.add(dashZMerged);
 }
 
 function createVehicles() {
@@ -1689,10 +1733,6 @@ function setupLighting() {
   scene.add(new THREE.HemisphereLight(0x111122, 0x040408, 0.35));
   const dir = new THREE.DirectionalLight(0xaabbcc, 0.25);
   dir.position.set(25, 40, 25);
-  dir.castShadow = true;
-  dir.shadow.mapSize.set(1024, 1024);
-  dir.shadow.camera.left=-20; dir.shadow.camera.right=20;
-  dir.shadow.camera.top=35; dir.shadow.camera.bottom=-5;
   scene.add(dir);
 
   [[0,3,7],[0,10,-7],[16,16,0],[-16,22,0]].forEach(p => {
@@ -1708,6 +1748,7 @@ function onPointerMove(e) {
   if (isRecording) return;
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  mouseMoved = true;
   lastInteraction = Date.now();
 }
 
@@ -1735,7 +1776,9 @@ function checkHover() {
     hoveredRoom = newHover;
   }
 
-  // Safety: ensure only the correct label is visible every frame
+}
+
+function syncLabels() {
   roomLabels.forEach((lbl, i) => {
     if (!lbl) return;
     if (selectedRoom >= 0 && i === selectedRoom) lbl.classList.add('visible');
@@ -1771,6 +1814,7 @@ function focusRoom(idx) {
     setRoomGroupOpacity(i, i === idx ? 1.0 : 0.4);
   }
   roomLabels[idx].classList.add('visible');
+  syncLabels();
   animateCamera(ROOM_CAM[idx].pos, ROOM_CAM[idx].target);
   if (!isRecording) setTimeout(() => showOverlay(idx), 800);
   document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => {
@@ -1794,6 +1838,7 @@ function resetView() {
     if (roomGlowBoxes[i]) { roomGlowBoxes[i].color.setHex(NEON_BRIGHT); roomGlowBoxes[i].opacity = 0; }
   }
   selectedRoom = -1;
+  syncLabels();
   animateCamera(OVERVIEW_POS, OVERVIEW_TARGET);
   document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => btn.classList.remove('active'));
 }
@@ -1987,8 +2032,8 @@ function applyTheme(idx) {
   const wasSelected = selectedRoom;
   clearBuilding();
   createBuilding();
-  buildFloorPanel();
   if (wasSelected >= 0) focusRoom(wasSelected);
+  syncLabels();
 
   // Update swatch active state
   document.querySelectorAll('#right-panel .theme-btn').forEach(s => {
@@ -2009,13 +2054,11 @@ function init() {
   camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 500);
   camera.position.copy(OVERVIEW_POS);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.prepend(renderer.domElement);
 
   labelRenderer = new CSS2DRenderer();
@@ -2458,7 +2501,7 @@ function animate() {
   }
 
   controls.update();
-  checkHover();
+  if (mouseMoved) { checkHover(); mouseMoved = false; }
 
   // Animate vehicles + light trails
   vehicles.forEach(v => {
@@ -2495,16 +2538,20 @@ function animate() {
     });
   });
 
-  // Subtle pulse on non-selected rooms
+  // Subtle pulse on non-selected rooms (throttled to ~40 distinct levels)
   const pulse = 0.02 * Math.sin(elapsed * 2);
-  const br = ((NEON_BRIGHT >> 16) & 0xff) / 255;
-  const bg = ((NEON_BRIGHT >> 8) & 0xff) / 255;
-  const bb = (NEON_BRIGHT & 0xff) / 255;
-  roomNeonMats.forEach((mat, i) => {
-    if (i !== selectedRoom && i !== hoveredRoom) {
-      mat.color.setRGB(br + pulse*0.5, bg + pulse*0.6, bb + pulse);
-    }
-  });
+  const pulseQuant = Math.round(pulse * 500);
+  if (pulseQuant !== lastPulseQuant) {
+    lastPulseQuant = pulseQuant;
+    const br = ((NEON_BRIGHT >> 16) & 0xff) / 255;
+    const bg = ((NEON_BRIGHT >> 8) & 0xff) / 255;
+    const bb = (NEON_BRIGHT & 0xff) / 255;
+    roomNeonMats.forEach((mat, i) => {
+      if (i !== selectedRoom && i !== hoveredRoom) {
+        mat.color.setRGB(br + pulse*0.5, bg + pulse*0.6, bb + pulse);
+      }
+    });
+  }
 
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
@@ -2512,7 +2559,7 @@ function animate() {
   frameCount++;
   const now = performance.now();
   if (now - lastFpsTime >= 1000) {
-    document.getElementById('fps-counter').textContent = `${frameCount} FPS`;
+    fpsEl.textContent = `${frameCount} FPS`;
     frameCount = 0; lastFpsTime = now;
   }
 }
