@@ -92,7 +92,7 @@ canvas{display:block}
   background:linear-gradient(270deg,rgba(2,3,8,0.5) 0%,transparent 100%)}
 #right-panel .right-buttons{display:flex;flex-direction:column;gap:2px;
   flex:1;justify-content:center}
-#right-panel .export-section{flex-shrink:0;border-top:1px solid rgba(var(--accent),0.2)}
+#right-panel .export-section{flex-shrink:0}
 #right-panel .panel-label{color:rgba(var(--accent),0.5);font-size:8px;letter-spacing:2px;
   padding:4px 8px 6px;margin-top:12px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
   border-top:1px solid rgba(var(--accent),0.08)}
@@ -233,7 +233,7 @@ canvas{display:block}
   #right-panel.open{transform:translateX(0)}
 
   /* Info overlay — full-width, pinned above floor strip */
-  #info-overlay{left:0!important;right:0;top:auto!important;bottom:calc(18px + 36px);
+  #info-overlay{left:0!important;right:0;top:auto!important;bottom:36px;
     transform:none;max-width:100%;width:100%;border-left:none;border-right:none}
 
   /* 3D labels smaller */
@@ -2082,7 +2082,7 @@ function stopAutoTour() {
    VIDEO EXPORT
    ============================================================ */
 const EXPORT_PRESETS = {
-  square:  { w: 1080, h: 1080, name: 'square' },
+  square:  { w: 1920, h: 1920, name: 'square' },
   landscape: { w: 1920, h: 1080, name: '1920x1080' },
   portrait: { w: 1080, h: 1920, name: '1080x1920' },
 };
@@ -2121,8 +2121,16 @@ async function recordVideo(presetKey) {
 
   try {
     const includeUI = document.getElementById('export-ui-overlay')?.checked ?? false;
-    const w = renderer.domElement.width;
-    const h = renderer.domElement.height;
+    const ew = preset.w;
+    const eh = preset.h;
+
+    // Resize renderer to export dimensions
+    renderer.setSize(ew, eh);
+    camera.aspect = ew / eh;
+    camera.updateProjectionMatrix();
+
+    const w = ew;
+    const h = eh;
     let stream, recCanvas, recCtx;
 
     if (includeUI) {
@@ -2271,6 +2279,10 @@ async function recordVideo(presetKey) {
   } finally {
     recCapturing = false;
     isRecording = false;
+    // Restore renderer to window size
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
     clickedBtn.classList.remove('exporting');
     document.querySelectorAll('.export-btn').forEach(b => b.disabled = false);
     resetView();
