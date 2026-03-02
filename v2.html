@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roam — Virtual Office V2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:80,144,224;--accent-hex:#5090e0;
+  --bright:138,180,248;--bright-hex:#8ab4f8;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#000;font-family:'Inter',system-ui,sans-serif;color:#fff}
+canvas{display:block}
+
+/* ─── Version nav ─── */
+#version-nav{position:fixed;top:0;left:0;right:0;height:36px;z-index:100;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);
+  border-bottom:1px solid rgba(var(--accent),0.15)}
+#version-nav a{color:rgba(var(--accent),0.5);font-size:9px;letter-spacing:2px;
+  font-family:'SF Mono',Consolas,monospace;text-decoration:none;
+  padding:3px 10px;border:1px solid rgba(var(--accent),0.15);transition:all .25s}
+#version-nav a:hover{color:var(--accent-hex);border-color:rgba(var(--accent),0.4)}
+#version-nav a.active{color:var(--bright-hex);border-color:rgba(var(--accent),0.4);background:rgba(var(--accent),0.1)}
+
+/* ─── CSS2D labels (always visible) ─── */
+.floor-label{background:rgba(0,0,0,0.85);
+  padding:5px 14px 5px 10px;border-radius:0;font-size:11px;font-weight:600;
+  font-family:'SF Mono',Consolas,monospace;
+  white-space:nowrap;pointer-events:none;letter-spacing:1.5px;backdrop-filter:blur(6px);
+  border:none;border-left:3px solid currentColor;
+  transition:font-size 0.4s ease, padding 0.4s ease, opacity 0.4s ease, color 0.4s ease}
+</style>
+</head>
+<body>
+
+<nav id="version-nav">
+  <a href="index.html">V1</a>
+  <a href="v2.html" class="active">V2</a>
+  <a href="v3.html">V3</a>
+</nav>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ============================================================
+   CONSTANTS
+   ============================================================ */
+const SLAB_H = 0.3;
+const ROOM_GAP = 1.0;
+const SLAB_OVERHANG = 0.3;
+const FLOOR_GAP = 0.7;
+const TUBE_T = 0.025;
+const TUBE_T_INTERIOR = 0.015;
+const NUM_ROOMS = 9;
+
+// Blue theme base colors
+const NEON        = 0x111118;
+const NEON_GOLD   = 0x3366aa;
+const NEON_BRIGHT = 0x5599ee;
+const WARM_LIGHT  = 0x667799;
+
+// Per-room blue shades — distinct but all within the blue family
+const ROOM_COLORS = [
+  0x66DDFF,  // Lobby — sky blue
+  0x3399FF,  // Conference — azure
+  0x2266DD,  // Interview — royal
+  0x44BBFF,  // Sales — cerulean
+  0x55AAEE,  // AInbox — steel blue
+  0x7799DD,  // Private — muted blue
+  0x1188FF,  // Theater — electric blue
+  0x88CCFF,  // Video — ice blue
+  0x44FFCC,  // Agent Coworkers — teal
+];
+
+const ROOM_SIZES = [
+  { w: 8,  d: 10, h: 5 },
+  { w: 8,  d: 10, h: 5 },
+  { w: 8,  d: 8,  h: 5 },
+  { w: 10, d: 12, h: 5 },
+  { w: 8,  d: 10, h: 5 },
+  { w: 6,  d: 6,  h: 4 },
+  { w: 12, d: 12, h: 6 },
+  { w: 8,  d: 8,  h: 5 },
+  { w: 10, d: 10, h: 5 },
+];
+
+const ROOM_INFO = [
+  { name: 'Lobby' },
+  { name: 'Conference Room' },
+  { name: 'Interview Rooms' },
+  { name: 'Sales Floor' },
+  { name: 'AInbox' },
+  { name: 'Private Office' },
+  { name: 'Theater' },
+  { name: 'Video Studio' },
+  { name: 'Agent Coworkers' },
+];
+
+// Yext layout
+const LAYOUT = {
+  floors: [[0,1,3],[6,4,8],[2,7],[5]],
+  uniformSize: { w: 7, d: 7, h: 5 },
+  offsets: [
+    {dx:0, dz:0},     // Room 0 — Lobby
+    {dx:0, dz:0},     // Room 1 — Conference
+    {dx:-1, dz:0},    // Room 2 — Interview (slight setback)
+    {dx:0, dz:3},     // Room 3 — Sales (depth stagger)
+    {dx:1, dz:-3},    // Room 4 — AInbox (opposite depth)
+    {dx:0, dz:0},     // Room 5 — Private Office
+    {dx:0, dz:3},     // Room 6 — Theater (depth stagger)
+    {dx:0, dz:-3},    // Room 7 — Video (opposite depth)
+    {dx:0, dz:0},     // Room 8 — Agent Coworkers
+  ],
+};
+
+/* ============================================================
+   COMPUTED POSITIONS
+   ============================================================ */
+let ROOM_POS = [];
+let ROOM_FLOOR = [];
+let OVERVIEW_POS = new THREE.Vector3(30, 20, 30);
+let OVERVIEW_TARGET = new THREE.Vector3(0, 10, 0);
+let activeUniformSize = null;
+
+// Place building in the inner corner of the road intersection
+// Road X spans z 17–23, Road Z spans x 39–45
+// Building sits just inside the corner (x < 39, z < 17)
+const BUILDING_OFFSET = { x: 26, z: 9 };
+
+function getRoomSize(ri) {
+  return activeUniformSize || ROOM_SIZES[ri];
+}
+
+function computePositions() {
+  ROOM_POS = []; ROOM_FLOOR = [];
+  activeUniformSize = LAYOUT.uniformSize || null;
+  LAYOUT.floors.forEach((rooms, fi) => {
+    let floorY = 0;
+    for (let f = 0; f < fi; f++) {
+      let fMaxH = 0;
+      LAYOUT.floors[f].forEach(ri => { const h = getRoomSize(ri).h; if (h > fMaxH) fMaxH = h; });
+      floorY += fMaxH + SLAB_H + FLOOR_GAP;
+    }
+    let totalW = 0;
+    rooms.forEach(ri => { totalW += getRoomSize(ri).w; });
+    totalW += (rooms.length - 1) * ROOM_GAP;
+    let cx = -totalW / 2;
+    rooms.forEach((ri) => {
+      const sz = getRoomSize(ri);
+      const rx = cx + sz.w / 2 + (LAYOUT.offsets[ri]?.dx || 0) + BUILDING_OFFSET.x;
+      const rz = (LAYOUT.offsets[ri]?.dz || 0) + BUILDING_OFFSET.z;
+      ROOM_POS[ri] = { x: rx, y: floorY, z: rz };
+      ROOM_FLOOR[ri] = fi;
+      cx += sz.w + ROOM_GAP;
+    });
+  });
+
+  // Compute overview camera
+  let minX = Infinity, maxX = -Infinity;
+  let minY = 0, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    const p = ROOM_POS[ri]; const sz = getRoomSize(ri);
+    minX = Math.min(minX, p.x - sz.w / 2);
+    maxX = Math.max(maxX, p.x + sz.w / 2);
+    maxY = Math.max(maxY, p.y + sz.h + SLAB_H);
+    minZ = Math.min(minZ, p.z - sz.d / 2);
+    maxZ = Math.max(maxZ, p.z + sz.d / 2);
+  }
+  const cx2 = (minX + maxX) / 2;
+  const cy2 = (minY + maxY) / 2;
+  const cz2 = (minZ + maxZ) / 2;
+  const extent = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+  const dist = extent * 1.1;
+  OVERVIEW_TARGET = new THREE.Vector3(cx2, cy2, cz2);
+  OVERVIEW_POS = new THREE.Vector3(cx2 + dist, cy2 + dist * 0.7, cz2 + dist);
+}
+
+/* ============================================================
+   GLOBALS
+   ============================================================ */
+let scene, camera, renderer, labelRenderer, controls, clock;
+const roomNeonMats = [];
+const roomLights = [];
+const roomGlowLights = [];
+const roomGroupRefs = [];
+const roomLabelDivs = [];
+let gridMinorMat, gridMajorMat, gridGlowMat;
+let frameCount = 0, lastFpsTime = performance.now();
+
+// Intro appearance animation state
+const introAnim = {
+  active: true,
+  elapsed: 0,
+  staggerDelay: 0.25,   // seconds between each floor
+  roomDuration: 0.8,    // seconds per room animation
+  startYOffset: -8,     // rooms start this far below final position
+};
+
+// Camera animation state
+const camAnim = {
+  active: false, progress: 0, duration: 1.4,
+  startPos: new THREE.Vector3(), endPos: new THREE.Vector3(),
+  startTarget: new THREE.Vector3(), endTarget: new THREE.Vector3(),
+};
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+}
+
+function animateCamera(targetPos, targetLookAt, duration = 1.4) {
+  camAnim.startPos.copy(camera.position);
+  camAnim.endPos.copy(targetPos);
+  camAnim.startTarget.copy(controls.target);
+  camAnim.endTarget.copy(targetLookAt);
+  camAnim.progress = 0;
+  camAnim.duration = duration;
+  camAnim.active = true;
+  controls.autoRotate = false;
+}
+
+function getRoomCam(ri) {
+  const p = ROOM_POS[ri];
+  const sz = getRoomSize(ri);
+  return {
+    pos: new THREE.Vector3(p.x + sz.w * 2.5, p.y + sz.h * 2.5, p.z + sz.d * 2.5),
+    target: new THREE.Vector3(p.x, p.y + sz.h * 0.5, p.z),
+  };
+}
+
+// Scripted tour: [delay_seconds, action]
+// Sales = room 3, Interview = room 2
+let tourTimer = 0;
+let tourStep = 0;
+const tourScript = [
+  { at: 3,  action: 'focus', room: 3 },   // Sales Floor
+  { at: 6,  action: 'focus', room: 2 },   // Interview Rooms
+  { at: 9,  action: 'focus', room: 8 },   // Agent Coworkers
+  { at: 12, action: 'zoomOut' },
+];
+
+let focusedRoom = -1;
+
+function dimRoom(ri, factor) {
+  const g = roomGroupRefs[ri];
+  if (!g) return;
+  g.traverse(c => {
+    // Dim lights
+    if (c.isLight) {
+      if (c._baseIntensity === undefined) c._baseIntensity = c.intensity;
+      c.intensity = c._baseIntensity * factor;
+      return;
+    }
+    if (!c.material) return;
+    // Store originals on first call
+    if (c.material._baseColor === undefined && c.material.color) {
+      c.material._baseColor = c.material.color.clone();
+    }
+    if (c.material._baseOpacity === undefined) {
+      c.material._baseOpacity = c.material.opacity;
+    }
+    // Dim color towards black
+    if (c.material._baseColor) {
+      c.material.color.copy(c.material._baseColor).multiplyScalar(factor);
+    }
+    // Scale opacity for transparent materials
+    if (c.material._baseOpacity < 1) {
+      c.material.transparent = true;
+      c.material.opacity = c.material._baseOpacity * factor;
+    }
+  });
+  if (roomLabelDivs[ri]) roomLabelDivs[ri].style.opacity = String(factor);
+}
+
+function focusRoom(ri) {
+  focusedRoom = ri;
+  for (let i = 0; i < NUM_ROOMS; i++) {
+    if (i === ri) {
+      // Override focused room to pure white
+      const g = roomGroupRefs[i];
+      if (g) g.traverse(c => {
+        if (!c.material || !c.material.color) return;
+        if (c.material._baseColor === undefined) c.material._baseColor = c.material.color.clone();
+        if (c.material._baseOpacity === undefined) c.material._baseOpacity = c.material.opacity;
+        c.material.color.set(0xffffff);
+      });
+      if (roomLabelDivs[i]) {
+        roomLabelDivs[i].textContent = '#10? ' + ROOM_INFO[i].name;
+        roomLabelDivs[i].style.color = '#ffffff';
+        roomLabelDivs[i].style.opacity = '1';
+        roomLabelDivs[i].style.fontSize = '16px';
+        roomLabelDivs[i].style.padding = '8px 18px 8px 14px';
+        roomLabelDivs[i].style.borderLeftWidth = '4px';
+      }
+    } else {
+      dimRoom(i, 0.15);
+      if (roomLabelDivs[i]) {
+        roomLabelDivs[i].style.fontSize = '11px';
+        roomLabelDivs[i].style.padding = '5px 14px 5px 10px';
+        roomLabelDivs[i].style.borderLeftWidth = '3px';
+      }
+    }
+  }
+}
+
+function unfocusRooms() {
+  focusedRoom = -1;
+  for (let i = 0; i < NUM_ROOMS; i++) {
+    dimRoom(i, 1.0);
+    // Restore label color and size
+    if (roomLabelDivs[i]) {
+      const shade = ROOM_COLORS[i];
+      const r = (shade >> 16) & 0xff, g = (shade >> 8) & 0xff, b = shade & 0xff;
+      roomLabelDivs[i].textContent = ROOM_INFO[i].name;
+      roomLabelDivs[i].style.color = `rgb(${r},${g},${b})`;
+      roomLabelDivs[i].style.fontSize = '11px';
+      roomLabelDivs[i].style.padding = '5px 14px 5px 10px';
+      roomLabelDivs[i].style.borderLeftWidth = '3px';
+    }
+  }
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function easeOutBack(t) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function makeTextCanvas(text, w, h, fontSize, fg, bg, fontWeight='bold') {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(0,0,w,h); }
+  ctx.fillStyle = fg;
+  ctx.font = `${fontWeight} ${fontSize}px Arial, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, w/2, h/2);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeScreenCanvas(type, w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  const sc = '#3366aa'; // Blue screen stroke
+  if (type === 'wave') {
+    for (let layer = 0; layer < 3; layer++) {
+      const freq1 = 0.03 + layer * 0.012;
+      const freq2 = 0.008 + layer * 0.005;
+      const amp1 = (0.2 - layer * 0.04) * h;
+      const amp2 = (0.12 - layer * 0.02) * h;
+      const yOff = h * 0.5 + (layer - 1) * h * 0.12;
+      ctx.save();
+      ctx.shadowColor = sc; ctx.shadowBlur = 12 - layer * 3;
+      ctx.strokeStyle = sc; ctx.globalAlpha = 0.3 + layer * 0.1;
+      ctx.lineWidth = 4 - layer;
+      ctx.beginPath();
+      for (let x = 0; x < w; x++) {
+        const y = yOff + Math.sin(x * freq1 + layer * 2) * amp1 + Math.sin(x * freq2 + layer) * amp2;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke(); ctx.restore();
+      ctx.strokeStyle = sc; ctx.globalAlpha = 0.9 - layer * 0.25;
+      ctx.lineWidth = 2 - layer * 0.5;
+      ctx.beginPath();
+      for (let x = 0; x < w; x++) {
+        const y = yOff + Math.sin(x * freq1 + layer * 2) * amp1 + Math.sin(x * freq2 + layer) * amp2;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (type === 'pie') {
+    const cx = w / 2, cy = h / 2;
+    const r = Math.min(w, h) * 0.35;
+    const slices = [0.35, 0.25, 0.2, 0.12, 0.08];
+    let angle = -Math.PI / 2;
+    ctx.save(); ctx.shadowColor = sc; ctx.shadowBlur = 14;
+    ctx.strokeStyle = sc; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.4;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    slices.forEach((pct, i) => {
+      const sweep = pct * Math.PI * 2;
+      ctx.strokeStyle = sc; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r); ctx.stroke();
+      ctx.globalAlpha = 0.3 + i * 0.12; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, r, angle, angle + sweep); ctx.stroke();
+      angle += sweep;
+    });
+    ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r); ctx.stroke();
+    ctx.globalAlpha = 0.7; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+function addScreen(group, type, w, h, x, iy, z, rotY) {
+  const tex = makeScreenCanvas(type, 512, 256);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+  scr.position.set(x, iy, z);
+  if (rotY) scr.rotation.y = rotY;
+  group.add(scr);
+}
+
+function makeInteriorEdges(w, h, d, mat) { return makeNeonEdges(w, h, d, mat, TUBE_T_INTERIOR); }
+function makeNeonEdges(w, h, d, mat, thickness) {
+  const hw=w/2, hh=h/2, hd=d/2, t=thickness||TUBE_T;
+  const edges = [
+    {s:[w+t,t,t],p:[0,-hh,hd]},{s:[w+t,t,t],p:[0,-hh,-hd]},
+    {s:[t,t,d+t],p:[-hw,-hh,0]},{s:[t,t,d+t],p:[hw,-hh,0]},
+    {s:[w+t,t,t],p:[0,hh,hd]},{s:[w+t,t,t],p:[0,hh,-hd]},
+    {s:[t,t,d+t],p:[-hw,hh,0]},{s:[t,t,d+t],p:[hw,hh,0]},
+    {s:[t,h,t],p:[-hw,0,hd]},{s:[t,h,t],p:[hw,0,hd]},
+    {s:[t,h,t],p:[-hw,0,-hd]},{s:[t,h,t],p:[hw,0,-hd]},
+  ];
+  const geos = edges.map(e => {
+    const g = new THREE.BoxGeometry(...e.s);
+    g.translate(...e.p);
+    return g;
+  });
+  const merged = mergeGeometries(geos);
+  geos.forEach(g => g.dispose());
+  return new THREE.Mesh(merged, mat);
+}
+
+/* ============================================================
+   INTERIOR — Lobby
+   ============================================================ */
+function createLobbyInterior(group, iy, sz, neonMat) {
+  const deskW = 2.4, deskH = 0.9, deskD = 0.8;
+  const deskY = iy + deskH / 2;
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
+  desk.position.set(0, deskY, sz.d * 0.1); group.add(desk);
+  const topEdge = makeInteriorEdges(deskW + 0.2, 0.05, deskD + 0.1, neonMat);
+  topEdge.position.set(0, iy + deskH + 0.025, sz.d * 0.1); group.add(topEdge);
+  const monW = 0.9, monH = 0.6;
+  const monY = iy + deskH + monH / 2 + 0.15;
+  addScreen(group, 'pie', monW, monH, 0, monY, sz.d * 0.1 - 0.1, 0);
+  const monFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
+  monFrame.position.set(0, monY, sz.d * 0.1 - 0.1); group.add(monFrame);
+  const pole = makeInteriorEdges(0.05, 0.15, 0.05, neonMat);
+  pole.position.set(0, iy + deskH + 0.075, sz.d * 0.1 - 0.1); group.add(pole);
+  const elevW = 1.6, elevH = sz.h * 0.7, elevD = 0.15;
+  const elevY = iy + elevH / 2;
+  const elevFrame = makeInteriorEdges(elevW, elevH, elevD, neonMat);
+  elevFrame.position.set(0, elevY, -sz.d / 2 + elevD / 2 + 0.1); group.add(elevFrame);
+  const doorLine = makeInteriorEdges(0.03, elevH - 0.2, 0.03, neonMat);
+  doorLine.position.set(0, elevY, -sz.d / 2 + 0.2); group.add(doorLine);
+  const indFrame = makeInteriorEdges(0.5, 0.2, 0.03, neonMat);
+  indFrame.position.set(0, iy + elevH + 0.2, -sz.d / 2 + 0.2); group.add(indFrame);
+}
+
+/* ============================================================
+   INTERIOR — Conference Room
+   ============================================================ */
+function createConferenceInterior(group, iy, sz, neonMat) {
+  addScreen(group, 'pie', sz.w * 0.7, sz.h * 0.5, 0, iy + sz.h * 0.55, -sz.d/2 + 0.2, 0);
+  const frame = makeInteriorEdges(sz.w * 0.7, sz.h * 0.5, 0.05, neonMat);
+  frame.position.set(0, iy + sz.h * 0.55, -sz.d/2 + 0.2); group.add(frame);
+  const tW = sz.w * 0.65, tH = 0.75, tD = 1.6;
+  const table = makeInteriorEdges(tW, 0.06, tD, neonMat);
+  table.position.set(0, iy + tH, 0); group.add(table);
+  [[-tW/2 + 0.15, -tD/2 + 0.1],[tW/2 - 0.15, -tD/2 + 0.1],
+   [-tW/2 + 0.15, tD/2 - 0.1],[tW/2 - 0.15, tD/2 - 0.1]].forEach(([lx, lz]) => {
+    const leg = makeInteriorEdges(0.04, tH, 0.04, neonMat);
+    leg.position.set(lx, iy + tH / 2, lz); group.add(leg);
+  });
+  const seatY = iy + 0.42;
+  const chairW = 0.4, chairD = 0.35;
+  function addChairLegs(cx, cz, hw, hd) {
+    const legH = seatY - iy;
+    [[-hw, -hd],[hw, -hd],[-hw, hd],[hw, hd]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, legH, 0.03, neonMat);
+      leg.position.set(cx + lx, iy + legH / 2, cz + lz); group.add(leg);
+    });
+  }
+  for (let i = 0; i < 4; i++) {
+    const cx = -tW / 2 + 0.5 + i * (tW - 1) / 3;
+    const bz = -tD / 2 - 0.5;
+    const s1 = makeInteriorEdges(chairW, 0.05, chairD, neonMat);
+    s1.position.set(cx, seatY, bz); group.add(s1);
+    addChairLegs(cx, bz, chairW / 2 - 0.04, chairD / 2 - 0.04);
+    const fz = tD / 2 + 0.5;
+    const s2 = makeInteriorEdges(chairW, 0.05, chairD, neonMat);
+    s2.position.set(cx, seatY, fz); group.add(s2);
+    addChairLegs(cx, fz, chairW / 2 - 0.04, chairD / 2 - 0.04);
+  }
+  [-tW / 2 - 0.55, tW / 2 + 0.55].forEach(ex => {
+    const s = makeInteriorEdges(chairD, 0.05, chairW, neonMat);
+    s.position.set(ex, seatY, 0); group.add(s);
+    const legH = seatY - iy;
+    [[-chairD / 2 + 0.04, -chairW / 2 + 0.04],[chairD / 2 - 0.04, -chairW / 2 + 0.04],
+     [-chairD / 2 + 0.04, chairW / 2 - 0.04],[chairD / 2 - 0.04, chairW / 2 - 0.04]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, legH, 0.03, neonMat);
+      leg.position.set(ex + lx, iy + legH / 2, lz); group.add(leg);
+    });
+  });
+}
+
+/* ============================================================
+   INTERIOR — Interview Room
+   ============================================================ */
+function createInterviewInterior(group, iy, sz, neonMat) {
+  const deskW = 2.2, deskH = 0.75, deskD = 1.0;
+  const deskZ = -0.3;
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
+  desk.position.set(0, iy + deskH / 2, deskZ); group.add(desk);
+  const top = makeInteriorEdges(deskW + 0.1, 0.04, deskD + 0.05, neonMat);
+  top.position.set(0, iy + deskH + 0.02, deskZ); group.add(top);
+  const chairZ = deskZ - deskD / 2 - 0.6;
+  const seat = makeInteriorEdges(0.55, 0.08, 0.5, neonMat);
+  seat.position.set(0, iy + 0.45, chairZ); group.add(seat);
+  const pole = makeInteriorEdges(0.06, 0.35, 0.06, neonMat);
+  pole.position.set(0, iy + 0.175, chairZ); group.add(pole);
+  for (let a = 0; a < 5; a++) {
+    const ang = (a / 5) * Math.PI * 2;
+    const leg = makeInteriorEdges(0.3, 0.04, 0.04, neonMat);
+    leg.position.set(Math.sin(ang) * 0.18, iy + 0.02, chairZ + Math.cos(ang) * 0.18);
+    leg.rotation.y = -ang; group.add(leg);
+  }
+  const guestZ = deskZ + deskD / 2 + 0.7;
+  [-0.7, 0.7].forEach(gx => {
+    const gs = makeInteriorEdges(0.45, 0.06, 0.4, neonMat);
+    gs.position.set(gx, iy + 0.42, guestZ); group.add(gs);
+    [[-0.18, -0.15],[0.18, -0.15],[-0.18, 0.15],[0.18, 0.15]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, 0.42, 0.03, neonMat);
+      leg.position.set(gx + lx, iy + 0.21, guestZ + lz); group.add(leg);
+    });
+  });
+}
+
+/* ============================================================
+   INTERIOR — Sales Floor
+   ============================================================ */
+function createSalesFloorInterior(group, iy, sz, neonMat) {
+  const podPositions = [
+    { x: -sz.w * 0.22, z: -sz.d * 0.15 },
+    { x:  sz.w * 0.22, z: -sz.d * 0.15 },
+    { x: -sz.w * 0.22, z:  sz.d * 0.2 },
+    { x:  sz.w * 0.22, z:  sz.d * 0.2 },
+  ];
+  podPositions.forEach(pp => {
+    const deskH = 0.75;
+    const d1 = makeInteriorEdges(2.0, 0.06, 0.8, neonMat);
+    d1.position.set(pp.x, iy + deskH, pp.z); group.add(d1);
+    const d2 = makeInteriorEdges(0.8, 0.06, 1.2, neonMat);
+    d2.position.set(pp.x - 0.6, iy + deskH, pp.z - 0.2); group.add(d2);
+    [[pp.x - 0.9, pp.z - 0.35], [pp.x + 0.9, pp.z - 0.35],
+     [pp.x + 0.9, pp.z + 0.35], [pp.x - 0.9, pp.z - 0.75]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, deskH, 0.03, neonMat);
+      leg.position.set(lx, iy + deskH / 2, lz); group.add(leg);
+    });
+    const monW = 0.55, monH = 0.38;
+    const monY = iy + deskH + 0.06 + monH / 2;
+    for (let m = -1; m <= 1; m++) {
+      const mx = pp.x + m * 0.6;
+      const mFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
+      mFrame.position.set(mx, monY, pp.z - 0.25); group.add(mFrame);
+      const stand = makeInteriorEdges(0.03, 0.06, 0.03, neonMat);
+      stand.position.set(mx, iy + deskH + 0.03, pp.z - 0.25); group.add(stand);
+    }
+    const chairZ = pp.z + 0.65;
+    const cSeatY = iy + 0.44;
+    const seat = makeInteriorEdges(0.45, 0.05, 0.4, neonMat);
+    seat.position.set(pp.x, cSeatY, chairZ); group.add(seat);
+    [[-0.18, -0.15],[0.18, -0.15],[-0.18, 0.15],[0.18, 0.15]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, cSeatY - iy, 0.03, neonMat);
+      leg.position.set(pp.x + lx, iy + (cSeatY - iy) / 2, chairZ + lz); group.add(leg);
+    });
+  });
+  [[-sz.w / 2 + 0.15, -sz.d * 0.2, Math.PI / 2],
+   [-sz.w / 2 + 0.15,  sz.d * 0.15, Math.PI / 2]].forEach(([sx, sz2]) => {
+    const sf = makeInteriorEdges(0.04, sz.h * 0.25, sz.d * 0.2, neonMat);
+    sf.position.set(sx, iy + sz.h * 0.55, sz2); group.add(sf);
+  });
+}
+
+/* ============================================================
+   INTERIOR — AInbox
+   ============================================================ */
+function createAInboxInterior(group, iy, sz, neonMat) {
+  const tableR = 1.4, tableH = 0.75;
+  const segments = 8;
+  for (let i = 0; i < segments; i++) {
+    const a1 = (i / segments) * Math.PI * 2;
+    const a2 = ((i + 1) / segments) * Math.PI * 2;
+    const x1 = Math.cos(a1) * tableR, z1 = Math.sin(a1) * tableR;
+    const x2 = Math.cos(a2) * tableR, z2 = Math.sin(a2) * tableR;
+    const dx = x2 - x1, dz = z2 - z1;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    const edge = makeInteriorEdges(len, 0.04, 0.04, neonMat);
+    edge.position.set((x1 + x2) / 2, iy + tableH, (z1 + z2) / 2);
+    edge.rotation.y = -Math.atan2(dz, dx); group.add(edge);
+  }
+  const ped = makeInteriorEdges(0.15, tableH - 0.1, 0.15, neonMat);
+  ped.position.set(0, iy + (tableH - 0.1) / 2, 0); group.add(ped);
+  const base = makeInteriorEdges(0.8, 0.04, 0.8, neonMat);
+  base.position.set(0, iy + 0.02, 0); group.add(base);
+  const coolerH = 0.55;
+  const cooler = makeInteriorEdges(0.25, coolerH, 0.25, neonMat);
+  cooler.position.set(0, iy + tableH + coolerH / 2, 0); group.add(cooler);
+  const jug = makeInteriorEdges(0.18, 0.25, 0.18, neonMat);
+  jug.position.set(0, iy + tableH + coolerH + 0.125, 0); group.add(jug);
+  const tap = makeInteriorEdges(0.06, 0.04, 0.08, neonMat);
+  tap.position.set(0, iy + tableH + coolerH * 0.5, 0.15); group.add(tap);
+  const numSeats = 6;
+  const seatR = tableR + 0.6;
+  for (let i = 0; i < numSeats; i++) {
+    const ang = (i / numSeats) * Math.PI * 2;
+    const sx = Math.cos(ang) * seatR;
+    const sz2 = Math.sin(ang) * seatR;
+    const chairRot = -ang + Math.PI;
+    const seat = makeInteriorEdges(0.45, 0.05, 0.4, neonMat);
+    seat.position.set(sx, iy + 0.42, sz2);
+    seat.rotation.y = chairRot; group.add(seat);
+    const offsets = [[-0.18, -0.15], [0.18, -0.15], [-0.18, 0.15], [0.18, 0.15]];
+    offsets.forEach(([lx, lz]) => {
+      const cosA = Math.cos(chairRot), sinA = Math.sin(chairRot);
+      const wx = lx * cosA - lz * sinA;
+      const wz = lx * sinA + lz * cosA;
+      const leg = makeInteriorEdges(0.03, 0.42, 0.03, neonMat);
+      leg.position.set(sx + wx, iy + 0.21, sz2 + wz); group.add(leg);
+    });
+  }
+}
+
+/* ============================================================
+   INTERIOR — Private Office
+   ============================================================ */
+function createPrivateOfficeInterior(group, iy, sz, neonMat) {
+  const deskW = 1.8, deskH = 0.75, deskD = 0.8;
+  const deskZ = -0.4;
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
+  desk.position.set(0, iy + deskH / 2, deskZ); group.add(desk);
+  const top = makeInteriorEdges(deskW + 0.08, 0.04, deskD + 0.04, neonMat);
+  top.position.set(0, iy + deskH + 0.02, deskZ); group.add(top);
+  const monFrame = makeInteriorEdges(0.7, 0.45, 0.03, neonMat);
+  monFrame.position.set(0, iy + deskH + 0.06 + 0.225, deskZ - 0.15); group.add(monFrame);
+  const monStand = makeInteriorEdges(0.04, 0.06, 0.04, neonMat);
+  monStand.position.set(0, iy + deskH + 0.03, deskZ - 0.15); group.add(monStand);
+  const chairZ = deskZ - deskD / 2 - 0.55;
+  const seat = makeInteriorEdges(0.5, 0.06, 0.45, neonMat);
+  seat.position.set(0, iy + 0.42, chairZ); group.add(seat);
+  const pole = makeInteriorEdges(0.05, 0.32, 0.05, neonMat);
+  pole.position.set(0, iy + 0.16, chairZ); group.add(pole);
+  for (let a = 0; a < 5; a++) {
+    const ang = (a / 5) * Math.PI * 2;
+    const leg = makeInteriorEdges(0.28, 0.03, 0.03, neonMat);
+    leg.position.set(Math.sin(ang) * 0.16, iy + 0.015, chairZ + Math.cos(ang) * 0.16);
+    leg.rotation.y = -ang; group.add(leg);
+  }
+  const px = sz.w / 2 - 0.6, pz = sz.d / 2 - 0.6;
+  const pot = makeInteriorEdges(0.35, 0.3, 0.35, neonMat);
+  pot.position.set(px, iy + 0.15, pz); group.add(pot);
+  const stem = makeInteriorEdges(0.04, 0.6, 0.04, neonMat);
+  stem.position.set(px, iy + 0.6, pz); group.add(stem);
+  [[0.25, 0.15], [-0.2, 0.2], [0.05, -0.22]].forEach(([lx, lz]) => {
+    const leaf = makeInteriorEdges(0.3, 0.04, 0.15, neonMat);
+    leaf.position.set(px + lx, iy + 0.75 + Math.random() * 0.2, pz + lz);
+    leaf.rotation.z = (Math.random() - 0.5) * 0.4; group.add(leaf);
+  });
+  const shelfW = sz.w * 0.5, shelfD = 0.25;
+  for (let s = 0; s < 3; s++) {
+    const shelfY = iy + 1.2 + s * 0.7;
+    const shelf = makeInteriorEdges(shelfW, 0.04, shelfD, neonMat);
+    shelf.position.set(0, shelfY, -sz.d / 2 + shelfD / 2 + 0.1); group.add(shelf);
+    [-shelfW / 2 + 0.1, shelfW / 2 - 0.1].forEach(bx => {
+      const bracket = makeInteriorEdges(0.03, 0.15, 0.03, neonMat);
+      bracket.position.set(bx, shelfY - 0.09, -sz.d / 2 + 0.15); group.add(bracket);
+    });
+  }
+}
+
+/* ============================================================
+   INTERIOR — Theater
+   ============================================================ */
+function createTheaterInterior(group, iy, sz, neonMat) {
+  const stageD = sz.d * 0.3, stageH = 0.5, stageW = sz.w * 0.85;
+  const stageZ = -sz.d / 2 + stageD / 2 + 0.2;
+  const stage = makeInteriorEdges(stageW, stageH, stageD, neonMat);
+  stage.position.set(0, iy + stageH / 2, stageZ); group.add(stage);
+  const stepW = 1.8, stepD = 0.35;
+  for (let s = 0; s < 3; s++) {
+    const stepH = stageH * ((s + 1) / 3);
+    const stepZ = stageZ + stageD / 2 + (2 - s) * stepD + stepD / 2;
+    const step = makeInteriorEdges(stepW, stepH, stepD, neonMat);
+    step.position.set(0, iy + stepH / 2, stepZ); group.add(step);
+  }
+  const screenW = sz.w * 0.85, screenH = sz.h * 0.55;
+  const screenZ = -sz.d / 2 + 0.15;
+  const screenY = iy + stageH + screenH / 2 + 0.3;
+  addScreen(group, 'wave', screenW, screenH, 0, screenY, screenZ, 0);
+  const frame = makeInteriorEdges(screenW, screenH, 0.05, neonMat);
+  frame.position.set(0, screenY, screenZ); group.add(frame);
+  const rows = 4, seatsPerBank = 5;
+  const seatW = 0.5, seatD = 0.4;
+  const seatGap = 0.15;
+  const bankW = seatsPerBank * (seatW + seatGap) - seatGap;
+  const aisleW = 0.8;
+  const rowStartZ = stageZ + stageD / 2 + 1.8;
+  const rowSpacing = 1.1;
+  for (let r = 0; r < rows; r++) {
+    const rowZ = rowStartZ + r * rowSpacing;
+    if (rowZ > sz.d / 2 - 0.5) continue;
+    [-1, 1].forEach(side => {
+      const bankCenterX = side * (aisleW / 2 + bankW / 2);
+      for (let s = 0; s < seatsPerBank; s++) {
+        const sx = bankCenterX - bankW / 2 + s * (seatW + seatGap) + seatW / 2;
+        if (Math.abs(sx) > sz.w / 2 - 0.4) continue;
+        const seat = makeInteriorEdges(seatW, 0.05, seatD, neonMat);
+        seat.position.set(sx, iy + 0.45, rowZ); group.add(seat);
+        [-seatW / 2 + 0.03, seatW / 2 - 0.03].forEach(dx => {
+          const leg = makeInteriorEdges(0.03, 0.45, 0.03, neonMat);
+          leg.position.set(sx + dx, iy + 0.225, rowZ); group.add(leg);
+        });
+      }
+    });
+  }
+}
+
+/* ============================================================
+   INTERIOR — Video Studio
+   ============================================================ */
+function createVideoStudioInterior(group, iy, sz, neonMat) {
+  const ceilY = iy + sz.h;
+  [[-0.2, 0.2], [0.2, 0.2], [0, -0.25]].forEach(([lx, lz]) => {
+    const leg = makeInteriorEdges(0.03, 1.1, 0.03, neonMat);
+    leg.position.set(lx, iy + 0.55, lz); group.add(leg);
+  });
+  const tripodHead = makeInteriorEdges(0.4, 0.06, 0.06, neonMat);
+  tripodHead.position.set(0, iy + 1.15, 0); group.add(tripodHead);
+  const camBody = makeInteriorEdges(0.6, 0.35, 0.4, neonMat);
+  camBody.position.set(0, iy + 1.4, 0); group.add(camBody);
+  const lens = makeInteriorEdges(0.15, 0.15, 0.3, neonMat);
+  lens.position.set(0, iy + 1.38, -0.3); group.add(lens);
+  const viewfinder = makeInteriorEdges(0.12, 0.1, 0.15, neonMat);
+  viewfinder.position.set(-0.15, iy + 1.63, 0.1); group.add(viewfinder);
+  const rec = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07),
+    new THREE.MeshBasicMaterial({ color: 0x661111 }));
+  rec.position.set(0.28, iy + 1.55, 0); group.add(rec);
+  const backdrop = makeInteriorEdges(sz.w * 0.65, sz.h * 0.75, 0.05, neonMat);
+  backdrop.position.set(0, iy + sz.h * 0.42, -sz.d/2 + 0.3); group.add(backdrop);
+  [[-sz.w * 0.25, -sz.d * 0.15], [sz.w * 0.25, sz.d * 0.15]].forEach(([lx, lz]) => {
+    const rod = makeInteriorEdges(0.03, 0.8, 0.03, neonMat);
+    rod.position.set(lx, ceilY - 0.4, lz); group.add(rod);
+    const housing = makeInteriorEdges(0.5, 0.1, 0.4, neonMat);
+    housing.position.set(lx, ceilY - 0.85, lz); group.add(housing);
+  });
+}
+
+/* ============================================================
+   INTERIOR — Agent Coworkers: AI workstation pods
+   ============================================================ */
+function createAgentCoworkersInterior(group, iy, sz, neonMat) {
+  // Central server rack
+  const rackW = 0.6, rackH = sz.h * 0.7, rackD = 0.6;
+  const rack = makeInteriorEdges(rackW, rackH, rackD, neonMat);
+  rack.position.set(0, iy + rackH / 2, 0); group.add(rack);
+  // Rack shelves
+  for (let s = 0; s < 5; s++) {
+    const shelf = makeInteriorEdges(rackW - 0.1, 0.03, rackD - 0.1, neonMat);
+    shelf.position.set(0, iy + 0.4 + s * (rackH / 5), 0); group.add(shelf);
+  }
+  // 6 workstation pods in a ring around the server
+  const podR = sz.w * 0.3;
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    const px = Math.cos(ang) * podR;
+    const pz = Math.sin(ang) * podR;
+    const rot = -ang + Math.PI;
+    // Desk
+    const deskW = 1.4, deskH = 0.75, deskD = 0.6;
+    const desk = makeInteriorEdges(deskW, 0.05, deskD, neonMat);
+    desk.position.set(px, iy + deskH, pz);
+    desk.rotation.y = rot; group.add(desk);
+    // Desk legs
+    const cosR = Math.cos(rot), sinR = Math.sin(rot);
+    [[-0.6, -0.25],[0.6, -0.25],[-0.6, 0.25],[0.6, 0.25]].forEach(([lx, lz]) => {
+      const wx = lx * cosR - lz * sinR;
+      const wz = lx * sinR + lz * cosR;
+      const leg = makeInteriorEdges(0.03, deskH, 0.03, neonMat);
+      leg.position.set(px + wx, iy + deskH / 2, pz + wz); group.add(leg);
+    });
+    // Monitor
+    const monW = 0.7, monH = 0.45;
+    const monOff = -0.15;
+    const mx = monOff * sinR;
+    const mz = monOff * -cosR;
+    const monFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
+    monFrame.position.set(px - mx, iy + deskH + 0.06 + monH / 2, pz - mz);
+    monFrame.rotation.y = rot; group.add(monFrame);
+    // Screen content
+    addScreen(group, 'wave', monW, monH, px - mx, iy + deskH + 0.06 + monH / 2, pz - mz, rot);
+  }
+}
+
+/* ============================================================
+   BUILDING CONSTRUCTION
+   ============================================================ */
+const interiorCreators = [
+  createLobbyInterior, createConferenceInterior, createInterviewInterior,
+  createSalesFloorInterior, createAInboxInterior, createPrivateOfficeInterior,
+  createTheaterInterior, createVideoStudioInterior, createAgentCoworkersInterior,
+];
+
+function createBuilding() {
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    const { x: rx, y: floorY, z: rz } = ROOM_POS[ri];
+    const sz = getRoomSize(ri);
+    const slabW = sz.w + SLAB_OVERHANG * 2;
+    const slabD = sz.d + SLAB_OVERHANG * 2;
+
+    const roomGroup = new THREE.Group();
+    roomGroup.position.set(rx, floorY, rz);
+
+    // Per-room neon material — unique gold shade
+    const neonMat = new THREE.MeshBasicMaterial({ color: ROOM_COLORS[ri] });
+    roomNeonMats[ri] = neonMat;
+
+    // Bottom slab
+    const slabEdges = makeNeonEdges(slabW, SLAB_H, slabD, neonMat);
+    slabEdges.position.y = SLAB_H / 2;
+    roomGroup.add(slabEdges);
+
+    // Glowing floor plate — colored tint per room
+    const floorGlowMat = new THREE.MeshBasicMaterial({
+      color: ROOM_COLORS[ri], transparent: true, opacity: 0.08, side: THREE.DoubleSide
+    });
+    const floorGlow = new THREE.Mesh(new THREE.PlaneGeometry(sz.w, sz.d), floorGlowMat);
+    floorGlow.rotation.x = -Math.PI / 2;
+    floorGlow.position.y = SLAB_H + 0.02;
+    roomGroup.add(floorGlow);
+
+    // Glass neon edges
+    const glassEdges = makeNeonEdges(sz.w, sz.h, sz.d, neonMat);
+    glassEdges.position.y = SLAB_H + sz.h / 2;
+    roomGroup.add(glassEdges);
+
+    // Roof cap
+    const roofEdges = makeNeonEdges(slabW, SLAB_H, slabD, new THREE.MeshBasicMaterial({ color: NEON }));
+    roofEdges.position.y = SLAB_H + sz.h + SLAB_H / 2;
+    roomGroup.add(roofEdges);
+
+    // Interior light — tinted to room color
+    const pl = new THREE.PointLight(ROOM_COLORS[ri], 3.0, sz.w * 1.5, 2);
+    pl.position.set(0, SLAB_H + sz.h * 0.6, 0);
+    roomGroup.add(pl);
+    roomLights[ri] = pl;
+
+    // Glow light — tinted to room color
+    const gl = new THREE.PointLight(ROOM_COLORS[ri], 1.5, sz.w * 2, 2);
+    gl.position.set(0, SLAB_H + sz.h * 0.4, 0);
+    roomGroup.add(gl);
+    roomGlowLights[ri] = gl;
+
+    // Interior content
+    const interiorGroup = new THREE.Group();
+    const iy = SLAB_H + 0.01;
+    interiorCreators[ri](interiorGroup, iy, sz, neonMat);
+    roomGroup.add(interiorGroup);
+
+    // CSS2D label — always visible
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'floor-label';
+    labelDiv.textContent = ROOM_INFO[ri].name;
+    // Color the label text to match the room's gold shade
+    const shade = ROOM_COLORS[ri];
+    const r = (shade >> 16) & 0xff;
+    const g = (shade >> 8) & 0xff;
+    const b = shade & 0xff;
+    labelDiv.style.color = `rgb(${r},${g},${b})`;
+    labelDiv.style.opacity = '0';
+    labelDiv.style.transition = 'opacity 0.4s ease';
+    const labelObj = new CSS2DObject(labelDiv);
+    labelObj.position.set(0, SLAB_H + sz.h + 1.0, 0);
+    roomGroup.add(labelObj);
+    roomLabelDivs[ri] = labelDiv;
+
+    // Start hidden for intro animation
+    roomGroup.scale.set(0, 0, 0);
+    roomGroup.position.y = floorY + introAnim.startYOffset;
+
+    scene.add(roomGroup);
+    roomGroupRefs[ri] = roomGroup;
+  }
+}
+
+/* ============================================================
+   ENVIRONMENT
+   ============================================================ */
+function createEnvironment() {
+  // Ground
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(300, 300),
+    new THREE.MeshBasicMaterial({ color: 0x000000 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.02;
+  ground.matrixAutoUpdate = false;
+  ground.updateMatrix();
+  scene.add(ground);
+
+  createTronGrid();
+  createRoads();
+  createVehicles();
+}
+
+function createTronGrid() {
+  const extent = 100;
+  // Minor grid
+  gridMinorMat = new THREE.LineBasicMaterial({ color: 0x1a3366, transparent: true, opacity: 0.5 });
+  const minorVerts = [];
+  for (let i = -extent; i <= extent; i += 2) {
+    minorVerts.push(-extent, 0, i, extent, 0, i);
+    minorVerts.push(i, 0, -extent, i, 0, extent);
+  }
+  const minorGeo = new THREE.BufferGeometry();
+  minorGeo.setAttribute('position', new THREE.Float32BufferAttribute(minorVerts, 3));
+  scene.add(new THREE.LineSegments(minorGeo, gridMinorMat));
+
+  // Major grid
+  gridMajorMat = new THREE.LineBasicMaterial({ color: 0x2a5599, transparent: true, opacity: 0.8 });
+  const majorVerts = [];
+  for (let i = -extent; i <= extent; i += 10) {
+    majorVerts.push(-extent, 0, i, extent, 0, i);
+    majorVerts.push(i, 0, -extent, i, 0, extent);
+  }
+  const majorGeo = new THREE.BufferGeometry();
+  majorGeo.setAttribute('position', new THREE.Float32BufferAttribute(majorVerts, 3));
+  scene.add(new THREE.LineSegments(majorGeo, gridMajorMat));
+
+  // Horizon glow
+  gridGlowMat = new THREE.MeshBasicMaterial({ color: 0x2255aa, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+  [[-extent,0],[extent,0],[0,-extent],[0,extent]].forEach(([x,z], i) => {
+    const isX = i < 2;
+    const strip = new THREE.Mesh(
+      new THREE.PlaneGeometry(isX ? 0.3 : extent*2, isX ? extent*2 : 0.3), gridGlowMat);
+    strip.rotation.x = -Math.PI/2;
+    strip.position.set(x, 0.01, z);
+    strip.matrixAutoUpdate = false; strip.updateMatrix();
+    scene.add(strip);
+  });
+}
+
+function createRoads() {
+  const surfMat = new THREE.MeshBasicMaterial({ color: 0x1a3366, transparent: true, opacity: 0.12 });
+  const makeEdgeMat = (op) => new THREE.MeshBasicMaterial({ color: 0x2a5599, transparent: true, opacity: op });
+  const centerMat = new THREE.MeshBasicMaterial({ color: NEON_BRIGHT, transparent: true, opacity: 0.5 });
+
+  // Road X
+  const roadX = new THREE.Mesh(new THREE.PlaneGeometry(120, 6), surfMat);
+  roadX.rotation.x = -Math.PI/2; roadX.position.set(0, 0.01, 20);
+  roadX.matrixAutoUpdate = false; roadX.updateMatrix(); scene.add(roadX);
+  [-3, 3].forEach(off => {
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(120, 0.5), makeEdgeMat(0.08));
+    glow.rotation.x = -Math.PI/2; glow.position.set(0, 0.015, 20 + off);
+    glow.matrixAutoUpdate = false; glow.updateMatrix(); scene.add(glow);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(120, 0.08), makeEdgeMat(0.6));
+    line.rotation.x = -Math.PI/2; line.position.set(0, 0.02, 20 + off);
+    line.matrixAutoUpdate = false; line.updateMatrix(); scene.add(line);
+  });
+  const dashXGeos = [];
+  for (let dx = -60; dx < 60; dx += 4) {
+    const g = new THREE.PlaneGeometry(1.5, 0.05);
+    g.rotateX(-Math.PI/2); g.translate(dx, 0.02, 20); dashXGeos.push(g);
+  }
+  const dashXMerged = new THREE.Mesh(mergeGeometries(dashXGeos), centerMat);
+  dashXGeos.forEach(g => g.dispose());
+  dashXMerged.matrixAutoUpdate = false; dashXMerged.updateMatrix(); scene.add(dashXMerged);
+
+  // Road Z
+  const roadZ = new THREE.Mesh(new THREE.PlaneGeometry(6, 120), surfMat.clone());
+  roadZ.rotation.x = -Math.PI/2; roadZ.position.set(42, 0.01, 0);
+  roadZ.matrixAutoUpdate = false; roadZ.updateMatrix(); scene.add(roadZ);
+  [-3, 3].forEach(off => {
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 120), makeEdgeMat(0.08));
+    glow.rotation.x = -Math.PI/2; glow.position.set(42 + off, 0.015, 0);
+    glow.matrixAutoUpdate = false; glow.updateMatrix(); scene.add(glow);
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 120), makeEdgeMat(0.6));
+    line.rotation.x = -Math.PI/2; line.position.set(42 + off, 0.02, 0);
+    line.matrixAutoUpdate = false; line.updateMatrix(); scene.add(line);
+  });
+  const dashZGeos = [];
+  for (let dz = -60; dz < 60; dz += 4) {
+    const g = new THREE.PlaneGeometry(0.05, 1.5);
+    g.rotateX(-Math.PI/2); g.translate(42, 0.02, dz); dashZGeos.push(g);
+  }
+  const dashZMerged = new THREE.Mesh(mergeGeometries(dashZGeos), centerMat.clone());
+  dashZGeos.forEach(g => g.dispose());
+  dashZMerged.matrixAutoUpdate = false; dashZMerged.updateMatrix(); scene.add(dashZMerged);
+}
+
+const vehicles = [];
+function createVehicles() {
+  const bikeColors = [0x3399ff,0x44bbff,0x2277dd,0x55aaff,0x2288ee,0x3399cc]; // Blue bike colors
+  const configs = [
+    { road:'x', z:19, dir:1, speed:12+Math.random()*6 },
+    { road:'x', z:21, dir:-1, speed:10+Math.random()*6 },
+    { road:'x', z:18.5, dir:1, speed:16+Math.random()*4 },
+    { road:'z', x:41, dir:1, speed:10+Math.random()*6 },
+    { road:'z', x:43, dir:-1, speed:14+Math.random()*4 },
+    { road:'z', x:40.5, dir:1, speed:12+Math.random()*4 },
+  ];
+  configs.forEach((cfg, ci) => {
+    const g = new THREE.Group();
+    const col = bikeColors[ci % bikeColors.length];
+    const glowMat = new THREE.MeshBasicMaterial({ color: col });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.7 });
+    const tailMat = new THREE.MeshBasicMaterial({ color: 0x661122 });
+
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.8), darkMat));
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.7), darkMat);
+    cabin.position.set(-0.1 * cfg.dir, 0.35, 0); g.add(cabin);
+    [0.25, -0.25].forEach(dz => {
+      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.14), glowMat);
+      hl.position.set(0.9 * cfg.dir, 0.05, dz); g.add(hl);
+    });
+    [0.25, -0.25].forEach(dz => {
+      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.12), tailMat);
+      tl.position.set(-0.92 * cfg.dir, 0.05, dz); g.add(tl);
+    });
+    const stripMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6 });
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.7), stripMat);
+    strip.rotation.x = -Math.PI / 2; strip.position.y = -0.19; g.add(strip);
+    const groundGlowMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+    const groundGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), groundGlowMat);
+    groundGlow.rotation.x = -Math.PI / 2;
+    groundGlow.position.set(0.6 * cfg.dir, -0.19, 0); g.add(groundGlow);
+
+    // Light trails
+    const trailMats = [], trailMeshes = [];
+    for (let ti = 0; ti < 20; ti++) {
+      const tMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, side: THREE.DoubleSide });
+      const tMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.08), tMat);
+      tMesh.rotation.x = -Math.PI / 2; tMesh.position.y = 0.02; tMesh.visible = false;
+      scene.add(tMesh); trailMats.push(tMat); trailMeshes.push(tMesh);
+    }
+
+    const startPos = (Math.random() - 0.5) * 100;
+    if (cfg.road === 'x') { g.position.set(startPos, 0.3, cfg.z); }
+    else { g.position.set(cfg.x, 0.3, startPos); g.rotation.y = Math.PI / 2; }
+    scene.add(g);
+    vehicles.push({ group: g, ...cfg, pos: startPos, trailMeshes, trailMats, trailIdx: 0, trailTimer: 0 });
+  });
+}
+
+/* ============================================================
+   LIGHTING
+   ============================================================ */
+function setupLighting() {
+  scene.add(new THREE.HemisphereLight(0x111122, 0x040408, 0.35));
+  const dir = new THREE.DirectionalLight(0xaabbcc, 0.25);
+  dir.position.set(25, 40, 25); scene.add(dir);
+  [[0,3,7],[0,10,-7],[16,16,0],[-16,22,0]].forEach(p => {
+    const al = new THREE.PointLight(WARM_LIGHT, 0.25, 25, 2);
+    al.position.set(...p); scene.add(al);
+  });
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  clock = new THREE.Clock();
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  scene.fog = new THREE.FogExp2(0x000000, 0.006);
+
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  document.body.prepend(renderer.domElement);
+
+  labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.domElement.style.position = 'absolute';
+  labelRenderer.domElement.style.top = '0';
+  labelRenderer.domElement.style.left = '0';
+  labelRenderer.domElement.style.pointerEvents = 'none';
+  document.body.appendChild(labelRenderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.minDistance = 10;
+  controls.maxDistance = 200;
+  controls.maxPolarAngle = Math.PI * 0.48;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.2;
+
+  setupLighting();
+  computePositions();
+  camera.position.copy(OVERVIEW_POS);
+  controls.target.copy(OVERVIEW_TARGET);
+  createBuilding();
+  createEnvironment();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  animate();
+}
+
+/* ============================================================
+   ANIMATION LOOP
+   ============================================================ */
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const elapsed = clock.elapsedTime;
+
+  // Camera animation
+  if (camAnim.active) {
+    camAnim.progress += delta / camAnim.duration;
+    if (camAnim.progress >= 1) { camAnim.progress = 1; camAnim.active = false; }
+    const t = easeInOutCubic(camAnim.progress);
+    camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, t);
+    controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, t);
+  }
+
+  // Scripted tour
+  tourTimer += delta;
+  if (tourStep < tourScript.length && tourTimer >= tourScript[tourStep].at) {
+    const step = tourScript[tourStep];
+    if (step.action === 'focus') {
+      focusRoom(step.room);
+      const cam = getRoomCam(step.room);
+      animateCamera(cam.pos, cam.target, 1.4);
+    } else if (step.action === 'zoomOut') {
+      unfocusRooms();
+      animateCamera(OVERVIEW_POS, OVERVIEW_TARGET, 1.4);
+    }
+    tourStep++;
+  }
+
+  // Resume auto-rotate after tour zoom out completes
+  if (tourStep >= tourScript.length && !camAnim.active) {
+    controls.autoRotate = true;
+  }
+
+  controls.update();
+
+  // Intro appearance animation — rooms rise up floor by floor
+  if (introAnim.active) {
+    introAnim.elapsed += delta;
+    let allDone = true;
+    const floors = LAYOUT.floors;
+    for (let fi = 0; fi < floors.length; fi++) {
+      const floorDelay = 0.3 + fi * introAnim.staggerDelay;
+      floors[fi].forEach((ri, roomInFloor) => {
+        const roomDelay = floorDelay + roomInFloor * 0.1;
+        const t = Math.max(0, Math.min(1, (introAnim.elapsed - roomDelay) / introAnim.roomDuration));
+        if (t < 1) allDone = false;
+        const eased = easeOutBack(t);
+        const scaleCurve = easeOutCubic(t);
+        const g = roomGroupRefs[ri];
+        if (!g) return;
+        const finalY = ROOM_POS[ri].y;
+        g.position.y = finalY + introAnim.startYOffset * (1 - eased);
+        g.scale.setScalar(scaleCurve);
+        // Fade in label near end of room animation
+        if (t > 0.6 && roomLabelDivs[ri]) {
+          roomLabelDivs[ri].style.opacity = String(Math.min(1, (t - 0.6) / 0.4));
+        }
+      });
+    }
+    if (allDone) introAnim.active = false;
+  }
+
+  // Animate vehicles
+  vehicles.forEach(v => {
+    v.pos += v.speed * v.dir * delta;
+    if (v.pos > 60) v.pos = -60;
+    if (v.pos < -60) v.pos = 60;
+    if (v.road === 'x') v.group.position.x = v.pos;
+    else v.group.position.z = v.pos;
+
+    v.trailTimer += delta;
+    if (v.trailTimer > 0.04) {
+      v.trailTimer = 0;
+      const tm = v.trailMeshes[v.trailIdx];
+      const tmat = v.trailMats[v.trailIdx];
+      if (v.road === 'x') { tm.position.set(v.pos, 0.02, v.group.position.z); tm.rotation.z = 0; }
+      else { tm.position.set(v.group.position.x, 0.02, v.pos); tm.rotation.z = Math.PI / 2; }
+      tmat.opacity = 0.4; tm.visible = true;
+      v.trailIdx = (v.trailIdx + 1) % v.trailMeshes.length;
+    }
+    v.trailMats.forEach((tmat, i) => {
+      if (tmat.opacity > 0) {
+        tmat.opacity -= delta * 0.5;
+        if (tmat.opacity <= 0) { tmat.opacity = 0; v.trailMeshes[i].visible = false; }
+      }
+    });
+  });
+
+  // Subtle pulse on room neons (only after intro, skip dimmed rooms)
+  if (!introAnim.active) {
+  const pulse = 0.02 * Math.sin(elapsed * 2);
+  roomNeonMats.forEach((mat, i) => {
+    if (focusedRoom >= 0 && i !== focusedRoom) return; // don't override dimmed rooms
+    const shade = ROOM_COLORS[i];
+    const br = ((shade >> 16) & 0xff) / 255;
+    const bg = ((shade >> 8) & 0xff) / 255;
+    const bb = (shade & 0xff) / 255;
+    mat.color.setRGB(br + pulse * 0.5, bg + pulse * 0.6, bb + pulse);
+  });
+  }
+
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+
+/* ============================================================
+   START
+   ============================================================ */
+init();
+</script>
+</body>
+</html>

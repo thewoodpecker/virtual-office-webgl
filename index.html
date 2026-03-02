@@ -173,6 +173,14 @@ canvas{display:block}
 /* ─── Logo ─── */
 #hud-logo{display:none}
 
+/* ─── Version nav ─── */
+#version-nav{display:flex;gap:6px;align-items:center;pointer-events:auto}
+#version-nav a{color:rgba(var(--accent),0.5);font-size:9px;letter-spacing:2px;
+  font-family:'SF Mono',Consolas,monospace;text-decoration:none;
+  padding:3px 10px;border:1px solid rgba(var(--accent),0.15);transition:all .25s}
+#version-nav a:hover{color:var(--accent-hex);border-color:rgba(var(--accent),0.4)}
+#version-nav a.active{color:var(--bright-hex);border-color:rgba(var(--accent),0.4);background:rgba(var(--accent),0.1)}
+
 /* ─── CSS2D labels ─── */
 .floor-label{background:var(--hud-bg);border:1px solid rgba(var(--accent),0.4);color:var(--bright-hex);
   padding:4px 12px;border-radius:0;font-size:10px;font-family:'SF Mono',Consolas,monospace;white-space:nowrap;
@@ -265,7 +273,11 @@ canvas{display:block}
 <div id="hud-frame">
   <div id="hud-top">
     <span>ROAM VIRTUAL OFFICE</span>
-    <img id="hud-logo" src="roam-logo.png" alt="Roam">
+    <nav id="version-nav">
+      <a href="index.html" class="active">V1</a>
+      <a href="v2.html">V2</a>
+      <a href="v3.html">V3</a>
+    </nav>
     <span id="fps-counter">-- FPS</span>
   </div>
   <div id="hud-bottom">
