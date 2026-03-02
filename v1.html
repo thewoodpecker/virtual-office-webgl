@@ -1,0 +1,2593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roam — Virtual Office</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:160,160,160;--accent-hex:#a0a0a0;
+  --bright:200,200,200;--bright-hex:#c8c8c8;
+  --hud-bg:rgba(2,3,8,0.7);
+  --hud-border:rgba(var(--accent),0.25);
+  --hud-line:rgba(var(--accent),0.12);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#000;font-family:'Inter',system-ui,sans-serif;color:#fff}
+canvas{display:block}
+
+/* ─── HUD FRAME ─── */
+#hud-frame{position:fixed;inset:0;z-index:40;pointer-events:none}
+
+/* Top bar */
+#hud-top{position:absolute;top:0;left:0;right:0;height:48px;
+  background:linear-gradient(180deg,rgba(var(--accent),0.08) 0%,transparent 100%);
+  border-bottom:1px solid var(--hud-border);display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+#hud-top span{font-size:9px;letter-spacing:2px;color:rgba(var(--accent),0.4);font-family:'SF Mono',Consolas,monospace}
+
+/* Bottom bar */
+#hud-bottom{position:absolute;bottom:0;left:0;right:0;height:22px;
+  background:linear-gradient(0deg,rgba(var(--accent),0.06) 0%,transparent 100%);
+  border-top:1px solid var(--hud-border);display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+#hud-bottom span{font-size:8px;letter-spacing:1.5px;color:rgba(var(--accent),0.3);font-family:'SF Mono',Consolas,monospace}
+
+/* Corner brackets */
+.hud-corner{position:absolute;width:24px;height:24px;pointer-events:none}
+.hud-corner::before,.hud-corner::after{content:'';position:absolute;background:rgba(var(--accent),0.4)}
+.hud-corner.tl{top:48px;left:0}.hud-corner.tr{top:48px;right:0}.hud-corner.bl{bottom:22px;left:0}.hud-corner.br{bottom:22px;right:0}
+.hud-corner.tl::before,.hud-corner.bl::before{left:0;width:24px;height:1px}
+.hud-corner.tl::after,.hud-corner.tr::after{top:0;height:24px;width:1px}
+.hud-corner.tr::before,.hud-corner.br::before{right:0;width:24px;height:1px}
+.hud-corner.bl::after,.hud-corner.br::after{bottom:0;height:24px;width:1px}
+.hud-corner.tl::before{top:0}.hud-corner.tl::after{left:0}
+.hud-corner.tr::before{top:0}.hud-corner.tr::after{right:0}
+.hud-corner.bl::before{bottom:0}.hud-corner.bl::after{left:0}
+.hud-corner.br::before{bottom:0}.hud-corner.br::after{right:0}
+
+/* Side accent lines */
+#hud-frame .side-line{position:absolute;width:1px;background:linear-gradient(180deg,transparent,rgba(var(--accent),0.15),transparent)}
+#hud-frame .side-line.left{left:0;top:72px;bottom:44px}
+#hud-frame .side-line.right{right:0;top:72px;bottom:44px}
+
+/* ─── PANELS (shared) ─── */
+.hud-panel{backdrop-filter:blur(8px);background:var(--hud-bg);
+  border:1px solid var(--hud-border);position:relative;padding:10px 8px}
+.hud-panel::before{content:'';position:absolute;top:0;left:8px;right:8px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(var(--accent),0.3),transparent)}
+.hud-panel .panel-header{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 2px}
+.hud-panel .panel-header .dot{width:4px;height:4px;background:var(--accent-hex);opacity:0.5}
+.hud-panel .panel-header span{font-size:8px;letter-spacing:2px;color:rgba(var(--accent),0.45);
+  font-family:'SF Mono',Consolas,monospace;text-transform:uppercase}
+
+/* ─── FLOOR PANEL (left) ─── */
+#floor-panel{position:fixed;top:48px;left:0;bottom:22px;z-index:50;
+  display:flex;flex-direction:column;width:150px;padding:0;
+  border-right:1px solid var(--hud-border);
+  background:linear-gradient(90deg,rgba(2,3,8,0.5) 0%,transparent 100%)}
+#floor-panel .floor-buttons{display:flex;flex-direction:column;gap:2px;
+  flex:1;justify-content:center}
+#floor-panel button{background:transparent;border:none;border-bottom:1px solid rgba(var(--accent),0.1);
+  color:rgba(var(--accent),0.55);width:100%;
+  padding:6px 10px;border-radius:0;cursor:pointer;font-size:10px;text-align:left;
+  transition:all .25s;font-family:'SF Mono',Consolas,monospace;letter-spacing:.5px;
+  pointer-events:auto}
+#floor-panel button:hover{color:var(--accent-hex);background:rgba(var(--accent),0.06)}
+#floor-panel button.active{color:var(--bright-hex);background:rgba(var(--accent),0.1)}
+#floor-panel button.overview{color:var(--bright-hex)}
+#floor-panel .floor-group-label{color:rgba(var(--accent),0.5);font-size:8px;
+  letter-spacing:2px;padding:4px 10px 1px;margin-top:12px;
+  font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
+  border-top:1px solid rgba(var(--accent),0.08)}
+#autoplay-toggle{position:fixed;bottom:22px;left:0;width:150px;z-index:51;
+  border:none;border-top:1px solid rgba(var(--accent),0.2);
+  color:var(--bright-hex);background:rgba(var(--accent),0.08);
+  padding:6px 10px;cursor:pointer;font-size:10px;text-align:left;
+  font-family:'SF Mono',Consolas,monospace;font-weight:600;letter-spacing:1px;
+  pointer-events:auto;transition:all .25s}
+#autoplay-toggle:hover{color:var(--accent-hex);background:rgba(var(--accent),0.15)}
+
+/* ─── RIGHT PANEL ─── */
+#right-panel{position:fixed;top:48px;right:0;bottom:22px;z-index:50;
+  display:flex;flex-direction:column;width:120px;padding:0;
+  border-left:1px solid var(--hud-border);
+  background:linear-gradient(270deg,rgba(2,3,8,0.5) 0%,transparent 100%)}
+#right-panel .right-buttons{display:flex;flex-direction:column;gap:2px;
+  flex:1;justify-content:center}
+#right-panel .export-section{flex-shrink:0}
+#right-panel .panel-label{color:rgba(var(--accent),0.5);font-size:8px;letter-spacing:2px;
+  padding:4px 8px 6px;margin-top:12px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;
+  border-top:1px solid rgba(var(--accent),0.08)}
+#right-panel .right-buttons .panel-label:first-child{margin-top:0;border-top:none}
+#right-panel button{background:transparent;border:none;border-bottom:1px solid rgba(var(--accent),0.1);
+  color:rgba(var(--accent),0.5);width:100%;
+  padding:5px 8px;border-radius:0;cursor:pointer;font-size:9px;text-align:left;
+  transition:all .25s;font-family:'SF Mono',Consolas,monospace;letter-spacing:.5px;
+  pointer-events:auto}
+#right-panel button:hover{color:var(--accent-hex);background:rgba(var(--accent),0.06)}
+#right-panel button.active{color:var(--bright-hex);background:rgba(var(--accent),0.1)}
+
+/* ─── Export controls ─── */
+.export-duration{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;
+  font-size:9px;font-family:'SF Mono',Consolas,monospace;color:rgba(var(--accent),0.5)}
+.export-duration label{letter-spacing:.5px}
+.duration-control{display:flex;align-items:center;gap:4px}
+.dur-btn{background:transparent;border:1px solid rgba(var(--accent),0.3);color:var(--accent-hex);
+  width:18px;height:18px;cursor:pointer;font-size:11px;line-height:1;
+  font-family:'SF Mono',Consolas,monospace;padding:0;pointer-events:auto;
+  display:flex;align-items:center;justify-content:center;transition:all .2s}
+.dur-btn:hover{background:rgba(var(--accent),0.15);color:var(--bright-hex)}
+#dur-value{font-size:10px;color:var(--bright-hex);min-width:20px;text-align:center;
+  font-family:'SF Mono',Consolas,monospace}
+.export-option{padding:5px 8px;font-size:9px;font-family:'SF Mono',Consolas,monospace;
+  color:rgba(var(--accent),0.5);border-bottom:1px solid rgba(var(--accent),0.1);
+  letter-spacing:.5px;pointer-events:auto}
+.export-option label{display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer}
+.export-option input[type="checkbox"]{accent-color:var(--accent-hex);width:12px;height:12px;cursor:pointer}
+.export-btn{pointer-events:auto}
+.export-btn:disabled{opacity:0.3;cursor:not-allowed}
+.export-btn.exporting{color:var(--bright-hex);opacity:1!important}
+.export-btn.exporting::after{content:'';display:inline-block;width:8px;height:8px;
+  border:1.5px solid rgba(var(--accent),0.3);border-top-color:var(--bright-hex);
+  border-radius:50%;margin-left:6px;animation:exspin 0.7s linear infinite;vertical-align:middle}
+@keyframes exspin{to{transform:rotate(360deg)}}
+
+/* ─── Recording indicator ─── */
+#rec-indicator{display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  z-index:200;align-items:center;gap:8px;padding:6px 16px;
+  background:rgba(2,3,8,0.85);border:1px solid rgba(255,60,60,0.4);backdrop-filter:blur(8px);
+  font-family:'SF Mono',Consolas,monospace;font-size:11px;letter-spacing:1px;color:#ff4444;
+  pointer-events:none}
+#rec-indicator.active{display:flex}
+#rec-indicator.downloaded{border-color:rgba(var(--accent),0.4);color:var(--bright-hex)}
+#rec-indicator .rec-dot{width:8px;height:8px;border-radius:50%;background:#ff4444;
+  animation:rec-blink 1s ease-in-out infinite}
+#rec-indicator.downloaded .rec-dot{background:var(--bright-hex);animation:none}
+@keyframes rec-blink{0%,100%{opacity:1}50%{opacity:0.2}}
+
+/* ─── INFO OVERLAY (tooltip) ─── */
+#info-overlay{display:none;position:fixed;left:0;top:0;
+  background:var(--hud-bg);border:1px solid var(--hud-border);padding:14px 16px;
+  max-width:260px;width:auto;z-index:100;backdrop-filter:blur(8px);pointer-events:auto}
+#info-overlay::before{content:'';position:absolute;top:0;left:8px;right:8px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(var(--accent),0.3),transparent)}
+#info-overlay h2{color:var(--bright-hex);margin-bottom:4px;font-size:14px;font-weight:600;
+  font-family:'SF Mono',Consolas,monospace;letter-spacing:.5px}
+#info-overlay .floor-num{color:rgba(var(--accent),0.5);font-size:9px;letter-spacing:2px;
+  margin-bottom:2px;font-weight:500;font-family:'SF Mono',Consolas,monospace}
+#info-overlay p{color:rgba(var(--accent),0.45);line-height:1.5;margin-bottom:12px;font-size:11px}
+#info-overlay .btn-row{display:flex;gap:6px}
+#info-overlay button{background:transparent;border:1px solid rgba(var(--accent),0.4);color:var(--accent-hex);
+  padding:4px 14px;border-radius:0;cursor:pointer;font-size:10px;transition:all .25s;
+  font-family:'SF Mono',Consolas,monospace;font-weight:500;letter-spacing:.5px;pointer-events:auto}
+#info-overlay button:hover{background:rgba(var(--accent),0.15);color:var(--bright-hex)}
+#info-overlay .btn-close{border-color:rgba(var(--accent),0.25);color:rgba(var(--accent),0.4)}
+#info-overlay .btn-close:hover{border-color:rgba(var(--accent),0.4);background:rgba(var(--accent),0.08);color:rgba(var(--accent),0.7)}
+
+/* ─── FPS ─── */
+#fps-counter{position:fixed;top:0;right:16px;height:48px;display:flex;align-items:center;color:rgba(var(--accent),0.3);
+  font-family:'SF Mono',Consolas,monospace;font-size:9px;z-index:50;letter-spacing:2px}
+
+/* ─── Logo ─── */
+#hud-logo{display:none}
+
+/* ─── Version nav ─── */
+#version-nav{display:flex;gap:6px;align-items:center;pointer-events:auto}
+#version-nav a{color:rgba(var(--accent),0.5);font-size:9px;letter-spacing:2px;
+  font-family:'SF Mono',Consolas,monospace;text-decoration:none;
+  padding:3px 10px;border:1px solid rgba(var(--accent),0.15);transition:all .25s}
+#version-nav a:hover{color:var(--accent-hex);border-color:rgba(var(--accent),0.4)}
+#version-nav a.active{color:var(--bright-hex);border-color:rgba(var(--accent),0.4);background:rgba(var(--accent),0.1)}
+
+/* ─── CSS2D labels ─── */
+.floor-label{background:var(--hud-bg);border:1px solid rgba(var(--accent),0.4);color:var(--bright-hex);
+  padding:4px 12px;border-radius:0;font-size:10px;font-family:'SF Mono',Consolas,monospace;white-space:nowrap;
+  pointer-events:none;letter-spacing:1px;
+  display:none;opacity:0}
+.floor-label.visible{display:block;opacity:1}
+
+/* ─── Mobile toggle buttons ─── */
+#mobile-settings-btn,#mobile-floors-btn{display:none;position:fixed;z-index:60;
+  width:32px;height:32px;border-radius:0;border:1px solid rgba(var(--accent),0.3);
+  background:var(--hud-bg);color:var(--accent-hex);font-size:16px;cursor:pointer;
+  pointer-events:auto;backdrop-filter:blur(8px);
+  font-family:'SF Mono',Consolas,monospace;line-height:1;padding:0;
+  align-items:center;justify-content:center;transition:all .25s}
+#mobile-settings-btn{top:52px;right:6px}
+#mobile-floors-btn{top:52px;left:6px}
+#mobile-settings-btn:hover,#mobile-floors-btn:hover{background:rgba(var(--accent),0.15);color:var(--bright-hex)}
+
+/* ─── MOBILE ─── */
+@media(max-width:768px){
+  /* Top bar — slimmer */
+  #hud-top{height:36px;padding:0 10px}
+  #hud-top span{font-size:7px;letter-spacing:1.5px}
+  #hud-logo{height:20px}
+  #fps-counter{height:36px;font-size:7px;right:10px}
+
+  /* Bottom bar — slimmer */
+  #hud-bottom{height:18px;padding:0 10px}
+  #hud-bottom span{font-size:6px;letter-spacing:1px}
+  #hud-status{display:none}
+
+  /* Corner brackets adjust */
+  .hud-corner.tl,.hud-corner.tr{top:36px}
+  .hud-corner.bl,.hud-corner.br{display:none}
+  #hud-frame .side-line.left{top:60px;bottom:0}
+  #hud-frame .side-line.right{top:60px;bottom:0}
+
+  /* Floor panel — vertical left-side drawer */
+  #hud-bottom{display:none}
+  #floor-panel{position:fixed;top:36px;left:0;bottom:0;right:auto;
+    width:140px;height:auto;flex-direction:column;
+    border-right:1px solid var(--hud-border);border-top:none;
+    background:rgba(2,3,8,0.92);backdrop-filter:blur(12px);
+    padding:0;overflow:hidden;
+    transform:translateX(-100%);transition:transform .3s ease;z-index:55}
+  #floor-panel.open{transform:translateX(0)}
+  #floor-panel .floor-buttons{flex-direction:column;flex-wrap:nowrap;gap:0;
+    overflow-x:hidden;overflow-y:auto;justify-content:flex-start;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1}
+  #floor-panel .floor-buttons::-webkit-scrollbar{display:none}
+  #floor-panel .floor-group-label{display:none}
+  #floor-panel button{width:100%;white-space:nowrap;padding:8px 10px;
+    font-size:9px;border-bottom:1px solid rgba(var(--accent),0.1);border-right:none;
+    flex-shrink:0;text-align:left}
+  #autoplay-toggle{position:fixed;bottom:0;left:0;width:100%;height:35px;z-index:105;
+    border-top:1px solid rgba(var(--accent),0.2);border-right:none;
+    background:rgba(2,3,8,0.92);backdrop-filter:blur(8px);
+    padding:0 10px;font-size:11px;text-align:center;pointer-events:auto}
+
+  /* Toggle buttons visible on mobile */
+  #mobile-settings-btn{display:flex;top:40px}
+  #mobile-floors-btn{display:flex;top:40px}
+
+  /* Right panel — off-screen slide-in drawer */
+  #right-panel{position:fixed;top:36px;right:0;bottom:18px;
+    width:140px;transform:translateX(100%);transition:transform .3s ease;
+    z-index:55;background:rgba(2,3,8,0.92);backdrop-filter:blur(12px);
+    border-left:1px solid var(--hud-border)}
+  #right-panel.open{transform:translateX(0)}
+
+  /* Info overlay — full-width, pinned above auto-tour button */
+  #info-overlay{left:0!important;right:0;top:auto!important;bottom:35px;
+    transform:none;max-width:100%;width:100%;border-left:none;border-right:none;
+    border-bottom:none}
+
+  /* 3D labels smaller */
+  .floor-label{font-size:8px;padding:3px 8px}
+}
+
+/* Small phones */
+@media(max-width:400px){
+  #floor-panel button{padding:6px 8px;font-size:8px}
+  #right-panel{width:120px}
+}
+
+</style>
+</head>
+<body>
+
+<div id="hud-frame">
+  <div id="hud-top">
+    <span>ROAM VIRTUAL OFFICE</span>
+    <nav id="version-nav">
+      <a href="v1.html" class="active">V1</a>
+      <a href="v2.html">V2</a>
+      <a href="index.html">V3</a>
+    </nav>
+    <span id="fps-counter">-- FPS</span>
+  </div>
+  <div id="hud-bottom">
+    <span>ROAM MAKES REMOTE WORK</span>
+    <span id="hud-status">SEE WHO'S WORKING // DROP-IN INSTANTLY</span>
+    <span>FUTURE OF WORK</span>
+  </div>
+  <div class="hud-corner tl"></div>
+  <div class="hud-corner tr"></div>
+  <div class="hud-corner bl"></div>
+  <div class="hud-corner br"></div>
+  <div class="side-line left"></div>
+  <div class="side-line right"></div>
+</div>
+
+
+<div id="floor-panel"></div>
+
+<button id="mobile-floors-btn" aria-label="Floors">☰</button>
+<button id="mobile-settings-btn" aria-label="Settings">⚙</button>
+
+<div id="right-panel">
+  <div class="right-buttons">
+    <div class="panel-label">Layout</div>
+    <button data-layout="0" class="active">Yext</button>
+    <button data-layout="1">Skyscraper</button>
+    <button data-layout="2">Zigzag</button>
+    <button data-layout="3">Split</button>
+    <button data-layout="4">Spiral</button>
+    <button data-layout="5">Helix</button>
+    <div class="panel-label">Color</div>
+    <button class="theme-btn" data-theme="0">Neon Flux</button>
+    <button class="theme-btn" data-theme="1">Solar Forge</button>
+    <button class="theme-btn" data-theme="2">Synth Wave</button>
+    <button class="theme-btn" data-theme="3">Ice Circuit</button>
+    <button class="theme-btn" data-theme="4">Phosphor</button>
+    <button class="theme-btn" data-theme="5">Ghost Wire</button>
+    <button class="theme-btn active" data-theme="6">Ghost Gold</button>
+    <button class="theme-btn" data-theme="7">Midnight Gold</button>
+    <button class="theme-btn" data-theme="8">Toxic</button>
+    <button class="theme-btn" data-theme="9">Deep Ocean</button>
+    <button class="theme-btn" data-theme="10">Blood Moon</button>
+    <button class="theme-btn" data-theme="11">Violet Haze</button>
+    <button class="theme-btn" data-theme="12">Ember</button>
+  </div>
+  <div class="export-section" style="display:none">
+    <div class="panel-label">Export</div>
+    <div class="export-option">
+      <label>Roam Logo <input type="checkbox" id="export-logo" checked></label>
+    </div>
+    <div class="export-option">
+      <label>UI Overlay <input type="checkbox" id="export-ui-overlay"></label>
+    </div>
+    <button class="export-btn" data-export="mp4">MP4</button>
+    <button class="export-btn" id="export-png">PNG</button>
+  </div>
+  </div>
+</div>
+
+<div id="rec-indicator"><span class="rec-dot"></span><span id="rec-label">Recording...</span></div>
+
+<div id="info-overlay">
+  <div class="floor-num" id="overlay-floor-num"></div>
+  <h2 id="overlay-title"></h2>
+  <p id="overlay-desc"></p>
+  <div class="btn-row">
+    <button id="overlay-close-btn" class="btn-close">Close</button>
+    <button id="overlay-overview-btn">◎ Overview</button>
+  </div>
+</div>
+
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+// Preload logo for export (CORS-safe)
+const exportLogoImg = new Image();
+exportLogoImg.crossOrigin = 'anonymous';
+exportLogoImg.src = 'roam-logo.png';
+
+/* ============================================================
+   CONSTANTS
+   ============================================================ */
+let NEON        = 0x181810;
+let NEON_GOLD   = 0x997722;
+let NEON_BRIGHT = 0xddaa33;
+let WARM_LIGHT  = 0x998866;
+
+/* ============================================================
+   COLOR THEMES
+   ============================================================ */
+const COLOR_THEMES = [
+  { // Blue (default)
+    name:'Blue',
+    neon:0x111118, gold:0x3366aa, bright:0x5599ee, warm:0x667799,
+    gridMinor:0x1a3366, gridMajor:0x2a5599, gridGlow:0x2255aa,
+    screenStroke:'#3366aa', glowLight:0x4488cc,
+    bikeColors:[0x3399ff,0x44bbff,0x2277dd,0x55aaff,0x2288ee,0x3399cc],
+    cssAccent:'80,144,224', cssAccentHex:'#5090e0',
+    cssBright:'138,180,248', cssBrightHex:'#8ab4f8',
+    pulseBase:[0.06,0.06,0.09],
+  },
+  { // Gold
+    name:'Gold',
+    neon:0x181810, gold:0x997722, bright:0xddaa33, warm:0x998866,
+    gridMinor:0x33280f, gridMajor:0x665520, gridGlow:0x554418,
+    screenStroke:'#aa8822', glowLight:0x886622,
+    bikeColors:[0xddaa22,0xffcc33,0xbb8811,0xeebb44,0xcc9922,0xaa7711],
+    cssAccent:'212,160,32', cssAccentHex:'#d4a020',
+    cssBright:'238,204,100', cssBrightHex:'#eecc64',
+    pulseBase:[0.09,0.07,0.04],
+  },
+  { // Magenta
+    name:'Magenta',
+    neon:0x180a14, gold:0x993366, bright:0xee55aa, warm:0x996688,
+    gridMinor:0x331028, gridMajor:0x662850, gridGlow:0x552244,
+    screenStroke:'#aa3377', glowLight:0xaa4488,
+    bikeColors:[0xff44aa,0xee3399,0xcc2288,0xff66bb,0xdd3399,0xbb1177],
+    cssAccent:'224,80,160', cssAccentHex:'#e050a0',
+    cssBright:'248,140,200', cssBrightHex:'#f88cc8',
+    pulseBase:[0.09,0.04,0.07],
+  },
+  { // Cyan
+    name:'Cyan',
+    neon:0x0a1818, gold:0x228888, bright:0x33dddd, warm:0x669988,
+    gridMinor:0x153333, gridMajor:0x2a6666, gridGlow:0x225555,
+    screenStroke:'#228888', glowLight:0x44aaaa,
+    bikeColors:[0x22dddd,0x33eeee,0x11bbbb,0x44cccc,0x22aaaa,0x33bbbb],
+    cssAccent:'32,208,208', cssAccentHex:'#20d0d0',
+    cssBright:'100,238,238', cssBrightHex:'#64eeee',
+    pulseBase:[0.04,0.09,0.09],
+  },
+  { // Green
+    name:'Green',
+    neon:0x0a180a, gold:0x228822, bright:0x44dd44, warm:0x669966,
+    gridMinor:0x153315, gridMajor:0x2a662a, gridGlow:0x225522,
+    screenStroke:'#228822', glowLight:0x44aa44,
+    bikeColors:[0x33dd33,0x44ee44,0x22bb22,0x55cc55,0x33aa33,0x44bb44],
+    cssAccent:'64,221,64', cssAccentHex:'#40dd40',
+    cssBright:'140,248,140', cssBrightHex:'#8cf88c',
+    pulseBase:[0.04,0.09,0.04],
+  },
+  { // Neutral
+    name:'Neutral',
+    neon:0x141414, gold:0x555555, bright:0x999999, warm:0x777777,
+    gridMinor:0x282828, gridMajor:0x4a4a4a, gridGlow:0x3a3a3a,
+    screenStroke:'#555555', glowLight:0x888888,
+    bikeColors:[0x888888,0x999999,0x777777,0xaaaaaa,0x666666,0x888888],
+    cssAccent:'160,160,160', cssAccentHex:'#a0a0a0',
+    cssBright:'200,200,200', cssBrightHex:'#c8c8c8',
+    pulseBase:[0.07,0.07,0.07],
+  },
+  { // Ghost Gold: Ghost Wire UI + gold building
+    name:'Ghost Gold',
+    neon:0x181810, gold:0x997722, bright:0xddaa33, warm:0x998866,
+    gridMinor:0x282828, gridMajor:0x4a4a4a, gridGlow:0x3a3a3a,
+    screenStroke:'#aa8822', glowLight:0x886622,
+    bikeColors:[0x888888,0x999999,0x777777,0xaaaaaa,0x666666,0x888888],
+    cssAccent:'160,160,160', cssAccentHex:'#a0a0a0',
+    cssBright:'200,200,200', cssBrightHex:'#c8c8c8',
+    pulseBase:[0.09,0.07,0.04],
+  },
+  { // Midnight Gold: Blue UI + gold building
+    name:'Midnight Gold',
+    neon:0x181810, gold:0x997722, bright:0xddaa33, warm:0x998866,
+    gridMinor:0x1a3366, gridMajor:0x2a5599, gridGlow:0x2255aa,
+    screenStroke:'#aa8822', glowLight:0x886622,
+    bikeColors:[0x3399ff,0x44bbff,0x2277dd,0x55aaff,0x2288ee,0x3399cc],
+    cssAccent:'80,144,224', cssAccentHex:'#5090e0',
+    cssBright:'138,180,248', cssBrightHex:'#8ab4f8',
+    pulseBase:[0.09,0.07,0.04],
+  },
+  { // Toxic: Green UI + magenta building
+    name:'Toxic',
+    neon:0x180a14, gold:0x993366, bright:0xee55aa, warm:0x996688,
+    gridMinor:0x153315, gridMajor:0x2a662a, gridGlow:0x225522,
+    screenStroke:'#aa3377', glowLight:0xaa4488,
+    bikeColors:[0x33dd33,0x44ee44,0x22bb22,0x55cc55,0x33aa33,0x44bb44],
+    cssAccent:'64,221,64', cssAccentHex:'#40dd40',
+    cssBright:'140,248,140', cssBrightHex:'#8cf88c',
+    pulseBase:[0.09,0.04,0.07],
+  },
+  { // Deep Ocean: Cyan UI + blue building
+    name:'Deep Ocean',
+    neon:0x111118, gold:0x3366aa, bright:0x5599ee, warm:0x667799,
+    gridMinor:0x153333, gridMajor:0x2a6666, gridGlow:0x225555,
+    screenStroke:'#3366aa', glowLight:0x4488cc,
+    bikeColors:[0x22dddd,0x33eeee,0x11bbbb,0x44cccc,0x22aaaa,0x33bbbb],
+    cssAccent:'32,208,208', cssAccentHex:'#20d0d0',
+    cssBright:'100,238,238', cssBrightHex:'#64eeee',
+    pulseBase:[0.04,0.09,0.09],
+  },
+  { // Blood Moon: Red/crimson
+    name:'Blood Moon',
+    neon:0x180a0a, gold:0x993333, bright:0xee4444, warm:0x996666,
+    gridMinor:0x331515, gridMajor:0x662a2a, gridGlow:0x552222,
+    screenStroke:'#aa3333', glowLight:0xaa4444,
+    bikeColors:[0xff3333,0xee2222,0xcc1111,0xff5544,0xdd3322,0xbb2211],
+    cssAccent:'224,64,64', cssAccentHex:'#e04040',
+    cssBright:'248,140,140', cssBrightHex:'#f88c8c',
+    pulseBase:[0.09,0.04,0.04],
+  },
+  { // Violet Haze: Purple/violet
+    name:'Violet Haze',
+    neon:0x140a18, gold:0x663399, bright:0x9955ee, warm:0x886699,
+    gridMinor:0x281533, gridMajor:0x502a66, gridGlow:0x442255,
+    screenStroke:'#773399', glowLight:0x8844aa,
+    bikeColors:[0x9944ff,0xaa55ff,0x8833dd,0xbb66ff,0x7733cc,0x9955ee],
+    cssAccent:'160,80,224', cssAccentHex:'#a050e0',
+    cssBright:'200,160,248', cssBrightHex:'#c8a0f8',
+    pulseBase:[0.07,0.04,0.09],
+  },
+  { // Ember: Orange/amber
+    name:'Ember',
+    neon:0x181008, gold:0x995522, bright:0xee7733, warm:0x997755,
+    gridMinor:0x332210, gridMajor:0x664420, gridGlow:0x553818,
+    screenStroke:'#aa6622', glowLight:0xaa6622,
+    bikeColors:[0xff7722,0xee8833,0xdd6611,0xff9944,0xcc6622,0xee7711],
+    cssAccent:'224,128,32', cssAccentHex:'#e08020',
+    cssBright:'248,180,100', cssBrightHex:'#f8b464',
+    pulseBase:[0.09,0.06,0.03],
+  },
+];
+let activeTheme = 6;
+
+const SLAB_H = 0.3;
+const ROOM_GAP = 1.0;
+const SLAB_OVERHANG = 0.3;
+const FLOOR_GAP = 0.7;
+const TUBE_T = 0.025;
+const TUBE_T_INTERIOR = 0.015;
+const NUM_ROOMS = 8;
+
+// Per-room sizes: { w, d, h }
+const ROOM_SIZES = [
+  /*0 Lobby*/      { w: 8,  d: 10, h: 5 },
+  /*1 Conference*/ { w: 8,  d: 10, h: 5 },
+  /*2 Interview*/  { w: 8,  d: 8,  h: 5 },
+  /*3 Sales*/      { w: 10, d: 12, h: 5 },
+  /*4 AInbox*/     { w: 8,  d: 10, h: 5 },
+  /*5 Private*/    { w: 6,  d: 6,  h: 4 },
+  /*6 Theater*/    { w: 12, d: 12, h: 6 },
+  /*7 Video*/      { w: 8,  d: 8,  h: 5 },
+];
+
+const ROOM_INFO = [
+  { name: 'Lobby',           desc: 'Your front door in the cloud. Greet visitors, schedule meetings, and see who just walked in.' },
+  { name: 'Conference Room', desc: 'Drop in for a quick sync or a full boardroom session — average meeting time: 8 minutes.' },
+  { name: 'Interview Rooms', desc: 'Private conversation suites. Lock the door, focus on the candidate, no scheduling needed.' },
+  { name: 'Sales Floor',     desc: 'A high-energy trading floor where your team closes deals side by side, remotely.' },
+  { name: 'AInbox',          desc: 'Your AI assistant is On-It. Summaries, action items, and transcripts — hands-free.' },
+  { name: 'Private Office',  desc: 'Your own corner office in the cloud. Open door means come on in, locked means heads down.' },
+  { name: 'Theater',         desc: 'All-hands, town halls, and presentations at scale — capacity for thousands, built for engagement.' },
+  { name: 'Video Studio',    desc: 'Professional recording setup for async updates, demos, and content your whole team can watch.' },
+];
+
+/* ============================================================
+   LAYOUT PRESETS
+   ============================================================ */
+const LAYOUT_PRESETS = [
+  { // Yext: staggered setback tower — wide base, terraced upper floors
+    name: 'Yext',
+    floors: [[0,1,3],[2,4],[6,7],[5]],
+    uniformSize: { w: 7, d: 7, h: 5 },
+    offsets: [
+      {dx:0, dz:0},{dx:0, dz:0},{dx:0, dz:0},
+      {dx:-2, dz:1.5},{dx:2, dz:-1.5},
+      {dx:3, dz:2},{dx:-1.5, dz:-2},
+      {dx:-2.5, dz:1},
+    ],
+  },
+  { // Skyscraper: 8 floors (1 room each, uniform size)
+    name: 'Skyscraper',
+    floors: [[0],[1],[2],[3],[4],[5],[6],[7]],
+    uniformSize: { w: 8, d: 8, h: 5 },
+    offsets: [
+      {dx:0, dz:0},{dx:0, dz:0},{dx:0, dz:0},
+      {dx:0, dz:0},{dx:0, dz:0},{dx:0, dz:0},
+      {dx:0, dz:0},{dx:0, dz:0},
+    ],
+  },
+  { // Zigzag: alternating left-right offsets per floor
+    name: 'Zigzag',
+    floors: [[0,1],[2,3],[4,5],[6,7]],
+    offsets: [
+      {dx:-3, dz:0},{dx:-3, dz:0},
+      {dx:3, dz:0},{dx:3, dz:0},
+      {dx:-3, dz:0},{dx:-3, dz:0},
+      {dx:3, dz:0},{dx:3, dz:0},
+    ],
+  },
+  { // Split: two separate towers side by side (4 left, 4 right)
+    name: 'Split',
+    floors: [[0,4],[1,5],[2,6],[3,7]],
+    offsets: [
+      {dx:-4, dz:0},{dx:-4, dz:0},{dx:-4, dz:0},{dx:-4, dz:0},
+      {dx:4, dz:0},{dx:4, dz:0},{dx:4, dz:0},{dx:4, dz:0},
+    ],
+  },
+  { // Spiral: rooms offset in a rotating pattern as they go up
+    name: 'Spiral',
+    floors: [[0],[1],[2],[3],[4],[5],[6],[7]],
+    offsets: [
+      {dx:0, dz:3},{dx:3, dz:0},{dx:0, dz:-3},{dx:-3, dz:0},
+      {dx:0, dz:3},{dx:3, dz:0},{dx:0, dz:-3},{dx:-3, dz:0},
+    ],
+  },
+  { // Helix: double spiral — two interleaved columns rotating
+    name: 'Helix',
+    floors: [[0,1],[2,3],[4,5],[6,7]],
+    offsets: (() => {
+      const r = 5;
+      const offsets = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.floor(i / 2) / 4) * Math.PI * 2 + (i % 2 === 0 ? 0 : Math.PI);
+        offsets.push({dx: Math.cos(a) * r, dz: Math.sin(a) * r});
+      }
+      return offsets;
+    })(),
+  },
+];
+
+/* ============================================================
+   COMPUTED POSITIONS (rebuilt on layout change)
+   ============================================================ */
+let activeLayout = 0;
+let ROOM_POS   = [];
+let ROOM_CAM   = [];
+let ROOM_FLOOR = [];
+let FLOOR_LAYOUT = LAYOUT_PRESETS[0].floors;
+let activeUniformSize = null;
+
+function getRoomSize(ri) {
+  return activeUniformSize || ROOM_SIZES[ri];
+}
+
+function computePositions(preset) {
+  ROOM_POS = []; ROOM_CAM = []; ROOM_FLOOR = [];
+  FLOOR_LAYOUT = preset.floors;
+  activeUniformSize = preset.uniformSize || null;
+  preset.floors.forEach((rooms, fi) => {
+    let maxH = 0;
+    rooms.forEach(ri => { const h = getRoomSize(ri).h; if (h > maxH) maxH = h; });
+    let floorY = 0;
+    for (let f = 0; f < fi; f++) {
+      let fMaxH = 0;
+      preset.floors[f].forEach(ri => { const h = getRoomSize(ri).h; if (h > fMaxH) fMaxH = h; });
+      floorY += fMaxH + SLAB_H + FLOOR_GAP;
+    }
+    let totalW = 0;
+    rooms.forEach(ri => { totalW += getRoomSize(ri).w; });
+    totalW += (rooms.length - 1) * ROOM_GAP;
+    let cx = -totalW / 2;
+    rooms.forEach((ri, j) => {
+      const sz = getRoomSize(ri);
+      const rx = cx + sz.w / 2 + (preset.offsets[ri]?.dx || 0);
+      const rz = preset.offsets[ri]?.dz || 0;
+      ROOM_POS[ri] = { x: rx, y: floorY, z: rz };
+      ROOM_CAM[ri] = {
+        pos:    new THREE.Vector3(rx + sz.w * 3, floorY + sz.h * 3, rz + sz.d * 3),
+        target: new THREE.Vector3(rx, floorY + sz.h * 0.5, rz),
+      };
+      ROOM_FLOOR[ri] = fi;
+      cx += sz.w + ROOM_GAP;
+    });
+  });
+
+  // Compute overview camera from bounding box of all rooms
+  let minX = Infinity, maxX = -Infinity;
+  let minY = 0, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    const p = ROOM_POS[ri]; const sz = getRoomSize(ri);
+    minX = Math.min(minX, p.x - sz.w / 2);
+    maxX = Math.max(maxX, p.x + sz.w / 2);
+    maxY = Math.max(maxY, p.y + sz.h + SLAB_H);
+    minZ = Math.min(minZ, p.z - sz.d / 2);
+    maxZ = Math.max(maxZ, p.z + sz.d / 2);
+  }
+  const cx2 = (minX + maxX) / 2;
+  const cy2 = (minY + maxY) / 2;
+  const cz2 = (minZ + maxZ) / 2;
+  const extent = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+  const dist = extent * 1.1;
+  OVERVIEW_TARGET = new THREE.Vector3(cx2, cy2, cz2);
+  OVERVIEW_POS = new THREE.Vector3(cx2 + dist, cy2 + dist * 0.7, cz2 + dist);
+}
+
+let OVERVIEW_POS    = new THREE.Vector3(30, 20, 30);
+let OVERVIEW_TARGET = new THREE.Vector3(0, 10, 0);
+
+/* ============================================================
+   GLOBALS
+   ============================================================ */
+let scene, camera, renderer, labelRenderer, controls, clock;
+const roomGlassMeshes = [];
+const roomNeonMats    = [];
+const roomLights      = [];
+const roomGlowLights  = [];
+const roomLabels      = [];
+const roomGroupRefs   = [];
+const roomInteriorRefs = [];
+const roomGlowBoxes   = [];
+const vehicles        = [];
+let gridMinorMat, gridMajorMat, gridGlowMat;
+let roadSurfaceMats = [], roadEdgeMats = [], roadCenterMat;
+const bikeMats = []; // per-vehicle array of { strip, glow, trail, groundGlow }
+
+let hoveredRoom = -1, selectedRoom = -1;
+let mouseMoved = false;
+let lastInteraction = Date.now();
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+
+const camAnim = {
+  active: false, progress: 0, duration: 1.4,
+  startPos: new THREE.Vector3(), endPos: new THREE.Vector3(),
+  startTarget: new THREE.Vector3(), endTarget: new THREE.Vector3(),
+};
+
+// Layout transition animation
+const layoutAnim = {
+  active: false,
+  progress: 0,
+  duration: 1.0,
+  startPositions: [], // {x,y,z} per room
+  endPositions: [],   // {x,y,z} per room
+  startScales: [],    // scale per room (for size changes)
+  endScales: [],
+};
+
+let frameCount = 0, lastFpsTime = performance.now();
+let lastPulseQuant = -999;
+const fpsEl = document.getElementById('fps-counter');
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+}
+
+function makeTextCanvas(text, w, h, fontSize, fg, bg, fontWeight='bold') {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(0,0,w,h); }
+  ctx.fillStyle = fg;
+  ctx.font = `${fontWeight} ${fontSize}px Arial, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, w/2, h/2);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeScreenCanvas(type, w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  // Transparent background
+  ctx.clearRect(0, 0, w, h);
+  const sc = COLOR_THEMES[activeTheme].screenStroke;
+  if (type === 'wave') {
+    // Multiple layered waves with glow
+    for (let layer = 0; layer < 3; layer++) {
+      const freq1 = 0.03 + layer * 0.012;
+      const freq2 = 0.008 + layer * 0.005;
+      const amp1 = (0.2 - layer * 0.04) * h;
+      const amp2 = (0.12 - layer * 0.02) * h;
+      const yOff = h * 0.5 + (layer - 1) * h * 0.12;
+      // Glow pass
+      ctx.save();
+      ctx.shadowColor = sc;
+      ctx.shadowBlur = 12 - layer * 3;
+      ctx.strokeStyle = sc;
+      ctx.globalAlpha = 0.3 + layer * 0.1;
+      ctx.lineWidth = 4 - layer;
+      ctx.beginPath();
+      for (let x = 0; x < w; x++) {
+        const y = yOff + Math.sin(x * freq1 + layer * 2) * amp1 + Math.sin(x * freq2 + layer) * amp2;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+      // Sharp pass
+      ctx.strokeStyle = sc;
+      ctx.globalAlpha = 0.9 - layer * 0.25;
+      ctx.lineWidth = 2 - layer * 0.5;
+      ctx.beginPath();
+      for (let x = 0; x < w; x++) {
+        const y = yOff + Math.sin(x * freq1 + layer * 2) * amp1 + Math.sin(x * freq2 + layer) * amp2;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (type === 'pie') {
+    const cx = w / 2, cy = h / 2;
+    const r = Math.min(w, h) * 0.35;
+    const slices = [0.35, 0.25, 0.2, 0.12, 0.08];
+    let angle = -Math.PI / 2;
+    // Glow pass
+    ctx.save();
+    ctx.shadowColor = sc;
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = sc;
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    // Slices — outline only
+    slices.forEach((pct, i) => {
+      const sweep = pct * Math.PI * 2;
+      // Slice divider line
+      ctx.strokeStyle = sc;
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
+      ctx.stroke();
+      // Arc segment
+      ctx.globalAlpha = 0.3 + i * 0.12;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, angle, angle + sweep);
+      ctx.stroke();
+      angle += sweep;
+    });
+    // Final divider
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
+    ctx.stroke();
+    // Outer ring (bright)
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+function addScreen(group, type, w, h, x, iy, z, rotY) {
+  const tex = makeScreenCanvas(type, 512, 256);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+  scr.position.set(x, iy, z);
+  if (rotY) scr.rotation.y = rotY;
+  group.add(scr);
+}
+
+function makeInteriorEdges(w, h, d, mat) { return makeNeonEdges(w, h, d, mat, TUBE_T_INTERIOR); }
+function makeNeonEdges(w, h, d, mat, thickness) {
+  const hw=w/2, hh=h/2, hd=d/2, t=thickness||TUBE_T;
+  const edges = [
+    {s:[w+t,t,t],p:[0,-hh,hd]},{s:[w+t,t,t],p:[0,-hh,-hd]},
+    {s:[t,t,d+t],p:[-hw,-hh,0]},{s:[t,t,d+t],p:[hw,-hh,0]},
+    {s:[w+t,t,t],p:[0,hh,hd]},{s:[w+t,t,t],p:[0,hh,-hd]},
+    {s:[t,t,d+t],p:[-hw,hh,0]},{s:[t,t,d+t],p:[hw,hh,0]},
+    {s:[t,h,t],p:[-hw,0,hd]},{s:[t,h,t],p:[hw,0,hd]},
+    {s:[t,h,t],p:[-hw,0,-hd]},{s:[t,h,t],p:[hw,0,-hd]},
+  ];
+  const geos = edges.map(e => {
+    const g = new THREE.BoxGeometry(...e.s);
+    g.translate(...e.p);
+    return g;
+  });
+  const merged = mergeGeometries(geos);
+  geos.forEach(g => g.dispose());
+  const mesh = new THREE.Mesh(merged, mat);
+  return mesh;
+}
+
+/* ============================================================
+   BUILDING CONSTRUCTION
+   ============================================================ */
+function setInteriorOpacity(group, opacity) {
+  group.traverse(c => {
+    if (c.material) {
+      c.material.transparent = true;
+      c.material.opacity = opacity;
+    }
+  });
+}
+
+function setRoomGroupOpacity(roomIdx, opacity) {
+  if (!roomGroupRefs[roomIdx]) return;
+  roomGroupRefs[roomIdx].traverse(c => {
+    if (c.material && c.material.visible !== false && c.material.opacity > 0) {
+      c.material.transparent = true;
+      c.material.opacity = opacity;
+    }
+  });
+}
+
+function clearBuilding() {
+  // Remove old label DOM elements from CSS2D renderer container
+  roomLabels.forEach(lbl => { if (lbl && lbl.parentNode) lbl.parentNode.removeChild(lbl); });
+  // Dispose GPU resources before removing from scene
+  roomGroupRefs.forEach(g => {
+    if (!g) return;
+    g.traverse(c => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) {
+        if (c.material.map) c.material.map.dispose();
+        c.material.dispose();
+      }
+    });
+    scene.remove(g);
+  });
+  roomGroupRefs.length = 0;
+  roomGlassMeshes.length = 0;
+  roomNeonMats.length = 0;
+  roomLights.length = 0;
+  roomGlowLights.length = 0;
+  roomLabels.length = 0;
+  roomInteriorRefs.length = 0;
+  roomGlowBoxes.length = 0;
+}
+
+function createBuilding() {
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    const { x: rx, y: floorY, z: rz } = ROOM_POS[ri];
+    const sz = getRoomSize(ri);
+    const slabW = sz.w + SLAB_OVERHANG * 2;
+    const slabD = sz.d + SLAB_OVERHANG * 2;
+
+    const roomGroup = new THREE.Group();
+    roomGroup.position.set(rx, floorY, rz);
+
+    // Per-room neon material
+    const neonMat = new THREE.MeshBasicMaterial({ color: NEON_BRIGHT });
+    roomNeonMats[ri] = neonMat;
+
+    // Bottom slab edges
+    const slabEdges = makeNeonEdges(slabW, SLAB_H, slabD, neonMat);
+    slabEdges.position.y = SLAB_H / 2;
+    roomGroup.add(slabEdges);
+
+    // Invisible glass box for raycasting
+    const glass = new THREE.Mesh(
+      new THREE.BoxGeometry(sz.w, sz.h, sz.d),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    glass.position.y = SLAB_H + sz.h / 2;
+    roomGroup.add(glass);
+    roomGlassMeshes[ri] = glass;
+
+    // Glass neon edges
+    const glassEdges = makeNeonEdges(sz.w, sz.h, sz.d, neonMat);
+    glassEdges.position.y = SLAB_H + sz.h / 2;
+    roomGroup.add(glassEdges);
+
+    // Roof cap edges
+    const roofEdges = makeNeonEdges(slabW, SLAB_H, slabD, new THREE.MeshBasicMaterial({ color: NEON }));
+    roofEdges.position.y = SLAB_H + sz.h + SLAB_H / 2;
+    roomGroup.add(roofEdges);
+
+    // Selection glow box (hidden by default)
+    const glowMat = new THREE.MeshBasicMaterial({ color: NEON, transparent: true, opacity: 0, side: THREE.BackSide });
+    const glowBox = new THREE.Mesh(new THREE.BoxGeometry(sz.w + 0.6, sz.h + 0.6, sz.d + 0.6), glowMat);
+    glowBox.position.y = SLAB_H + sz.h / 2;
+    roomGroup.add(glowBox);
+    roomGlowBoxes[ri] = glowMat;
+
+    // Interior ambient light
+    const pl = new THREE.PointLight(WARM_LIGHT, 3.0, sz.w * 1.5, 2);
+    pl.position.set(0, SLAB_H + sz.h * 0.6, 0);
+    roomGroup.add(pl);
+    roomLights[ri] = pl;
+
+    // Blue glow light
+    const gl = new THREE.PointLight(0x4488cc, 1.5, sz.w * 2, 2);
+    gl.position.set(0, SLAB_H + sz.h * 0.4, 0);
+    roomGroup.add(gl);
+    roomGlowLights[ri] = gl;
+
+    // Interior content (always visible, dimmed until selected)
+    const interiorGroup = new THREE.Group();
+    const iy = SLAB_H + 0.01;
+    if (ri === 0) createLobbyInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 1) createConferenceInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 2) createInterviewInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 3) createSalesFloorInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 4) createAInboxInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 5) createPrivateOfficeInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 6) createTheaterInterior(interiorGroup, iy, sz, neonMat);
+    if (ri === 7) createVideoStudioInterior(interiorGroup, iy, sz, neonMat);
+    // Dim interior by default
+    setInteriorOpacity(interiorGroup, 1.0);
+    roomGroup.add(interiorGroup);
+    roomInteriorRefs[ri] = interiorGroup;
+
+    // CSS2D label
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'floor-label';
+    labelDiv.textContent = ROOM_INFO[ri].name;
+    const labelObj = new CSS2DObject(labelDiv);
+    labelObj.position.set(0, SLAB_H + sz.h + 1.0, 0);
+    roomGroup.add(labelObj);
+    roomLabels[ri] = labelDiv;
+
+    scene.add(roomGroup);
+    roomGroupRefs[ri] = roomGroup;
+  }
+}
+
+/* ============================================================
+   INTERIOR — Lobby: reception desk + monitor + elevator
+   ============================================================ */
+function createLobbyInterior(group, iy, sz, neonMat) {
+  // --- Reception desk (centered, toward front) ---
+  const deskW = 2.4, deskH = 0.9, deskD = 0.8;
+  const deskY = iy + deskH / 2;
+  // Desk body
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
+  desk.position.set(0, deskY, sz.d * 0.1);
+  group.add(desk);
+  // Desk top surface (thin slab)
+  const topEdge = makeInteriorEdges(deskW + 0.2, 0.05, deskD + 0.1, neonMat);
+  topEdge.position.set(0, iy + deskH + 0.025, sz.d * 0.1);
+  group.add(topEdge);
+
+  // --- Monitor on desk ---
+  const monW = 0.9, monH = 0.6;
+  const monY = iy + deskH + monH / 2 + 0.15;
+  // Screen
+  addScreen(group, 'pie', monW, monH, 0, monY, sz.d * 0.1 - 0.1, 0);
+  // Screen frame
+  const monFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
+  monFrame.position.set(0, monY, sz.d * 0.1 - 0.1);
+  group.add(monFrame);
+  // Stand pole
+  const pole = makeInteriorEdges(0.05, 0.15, 0.05, neonMat);
+  pole.position.set(0, iy + deskH + 0.075, sz.d * 0.1 - 0.1);
+  group.add(pole);
+
+  // --- Elevator on back wall ---
+  const elevW = 1.6, elevH = sz.h * 0.7, elevD = 0.15;
+  const elevY = iy + elevH / 2;
+  // Elevator frame (tall rectangle on back wall)
+  const elevFrame = makeInteriorEdges(elevW, elevH, elevD, neonMat);
+  elevFrame.position.set(0, elevY, -sz.d / 2 + elevD / 2 + 0.1);
+  group.add(elevFrame);
+  // Door split line (vertical center line)
+  const doorLine = makeInteriorEdges(0.03, elevH - 0.2, 0.03, neonMat);
+  doorLine.position.set(0, elevY, -sz.d / 2 + 0.2);
+  group.add(doorLine);
+  // Floor indicator above elevator
+  const indW = 0.5, indH = 0.2;
+  const indFrame = makeInteriorEdges(indW, indH, 0.03, neonMat);
+  indFrame.position.set(0, iy + elevH + 0.2, -sz.d / 2 + 0.2);
+  group.add(indFrame);
+}
+
+/* ============================================================
+   INTERIOR — Interview Room: desk + office chair + 2 guest chairs
+   ============================================================ */
+function createInterviewInterior(group, iy, sz, neonMat) {
+  // --- Desk (centered, slightly toward back) ---
+  const deskW = 2.2, deskH = 0.75, deskD = 1.0;
+  const deskZ = -0.3;
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
+  desk.position.set(0, iy + deskH / 2, deskZ);
+  group.add(desk);
+  // Desk top
+  const top = makeInteriorEdges(deskW + 0.1, 0.04, deskD + 0.05, neonMat);
+  top.position.set(0, iy + deskH + 0.02, deskZ);
+  group.add(top);
+
+  // --- Office chair (behind desk) ---
+  // Seat
+  const seatW = 0.55, seatH = 0.08, seatD = 0.5;
+  const chairZ = deskZ - deskD / 2 - 0.6;
+  const chairSeatY = iy + 0.45;
+  const seat = makeInteriorEdges(seatW, seatH, seatD, neonMat);
+  seat.position.set(0, chairSeatY, chairZ);
+  group.add(seat);
+  // Pedestal
+  const pole = makeInteriorEdges(0.06, 0.35, 0.06, neonMat);
+  pole.position.set(0, iy + 0.175, chairZ);
+  group.add(pole);
+  // Base star (5 small legs)
+  for (let a = 0; a < 5; a++) {
+    const ang = (a / 5) * Math.PI * 2;
+    const leg = makeInteriorEdges(0.3, 0.04, 0.04, neonMat);
+    leg.position.set(Math.sin(ang) * 0.18, iy + 0.02, chairZ + Math.cos(ang) * 0.18);
+    leg.rotation.y = -ang;
+    group.add(leg);
+  }
+
+  // --- Two guest chairs (in front of desk) ---
+  const guestZ = deskZ + deskD / 2 + 0.7;
+  [-0.7, 0.7].forEach(gx => {
+    // Seat
+    const gs = makeInteriorEdges(0.45, 0.06, 0.4, neonMat);
+    gs.position.set(gx, iy + 0.42, guestZ);
+    group.add(gs);
+    // 4 legs
+    [[-0.18, -0.15],[0.18, -0.15],[-0.18, 0.15],[0.18, 0.15]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, 0.42, 0.03, neonMat);
+      leg.position.set(gx + lx, iy + 0.21, guestZ + lz);
+      group.add(leg);
+    });
+  });
+}
+
+/* ============================================================
+   INTERIOR — Sales Floor: trading pods + monitors + ticker
+   ============================================================ */
+function createSalesFloorInterior(group, iy, sz, neonMat) {
+  // --- Trading pods (curved desks with monitor banks) ---
+  // 4 pods in a 2x2 grid
+  const podPositions = [
+    { x: -sz.w * 0.22, z: -sz.d * 0.15 },
+    { x:  sz.w * 0.22, z: -sz.d * 0.15 },
+    { x: -sz.w * 0.22, z:  sz.d * 0.2 },
+    { x:  sz.w * 0.22, z:  sz.d * 0.2 },
+  ];
+
+  podPositions.forEach(pp => {
+    // Pod desk — L-shaped using 2 pieces
+    const deskH = 0.75;
+    // Front piece
+    const d1 = makeInteriorEdges(2.0, 0.06, 0.8, neonMat);
+    d1.position.set(pp.x, iy + deskH, pp.z);
+    group.add(d1);
+    // Side wing
+    const d2 = makeInteriorEdges(0.8, 0.06, 1.2, neonMat);
+    d2.position.set(pp.x - 0.6, iy + deskH, pp.z - 0.2);
+    group.add(d2);
+
+    // Desk legs (4 corners of L)
+    [[pp.x - 0.9, pp.z - 0.35], [pp.x + 0.9, pp.z - 0.35],
+     [pp.x + 0.9, pp.z + 0.35], [pp.x - 0.9, pp.z - 0.75]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, deskH, 0.03, neonMat);
+      leg.position.set(lx, iy + deskH / 2, lz);
+      group.add(leg);
+    });
+
+    // Monitor bank — 3 screens per pod
+    const monW = 0.55, monH = 0.38;
+    const monY = iy + deskH + 0.06 + monH / 2;
+    for (let m = -1; m <= 1; m++) {
+      const mx = pp.x + m * 0.6;
+      const mFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
+      mFrame.position.set(mx, monY, pp.z - 0.25);
+      group.add(mFrame);
+      // Stand
+      const stand = makeInteriorEdges(0.03, 0.06, 0.03, neonMat);
+      stand.position.set(mx, iy + deskH + 0.03, pp.z - 0.25);
+      group.add(stand);
+    }
+
+    // Chair
+    const chairZ = pp.z + 0.65;
+    const cSeatY = iy + 0.44;
+    const seat = makeInteriorEdges(0.45, 0.05, 0.4, neonMat);
+    seat.position.set(pp.x, cSeatY, chairZ);
+    group.add(seat);
+    // 4 legs
+    [[-0.18, -0.15],[0.18, -0.15],[-0.18, 0.15],[0.18, 0.15]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, cSeatY - iy, 0.03, neonMat);
+      leg.position.set(pp.x + lx, iy + (cSeatY - iy) / 2, chairZ + lz);
+      group.add(leg);
+    });
+  });
+
+  // --- Side wall screens (smaller info displays) ---
+  [[-sz.w / 2 + 0.15, -sz.d * 0.2, Math.PI / 2],
+   [-sz.w / 2 + 0.15,  sz.d * 0.15, Math.PI / 2]].forEach(([sx, sz2, ry]) => {
+    const sf = makeInteriorEdges(0.04, sz.h * 0.25, sz.d * 0.2, neonMat);
+    sf.position.set(sx, iy + sz.h * 0.55, sz2);
+    group.add(sf);
+  });
+}
+
+/* ============================================================
+   INTERIOR — Conference Room whiteboard
+   ============================================================ */
+function createConferenceInterior(group, iy, sz, neonMat) {
+  // Whiteboard on back wall
+  addScreen(group, 'pie', sz.w * 0.7, sz.h * 0.5, 0, iy + sz.h * 0.55, -sz.d/2 + 0.2, 0);
+  const frame = makeInteriorEdges(sz.w * 0.7, sz.h * 0.5, 0.05, neonMat);
+  frame.position.set(0, iy + sz.h * 0.55, -sz.d/2 + 0.2);
+  group.add(frame);
+
+  // --- Long conference table (centered) ---
+  const tW = sz.w * 0.65, tH = 0.75, tD = 1.6;
+  const table = makeInteriorEdges(tW, 0.06, tD, neonMat);
+  table.position.set(0, iy + tH, 0);
+  group.add(table);
+  // 4 table legs
+  [[-tW/2 + 0.15, -tD/2 + 0.1],[tW/2 - 0.15, -tD/2 + 0.1],
+   [-tW/2 + 0.15, tD/2 - 0.1],[tW/2 - 0.15, tD/2 - 0.1]].forEach(([lx, lz]) => {
+    const leg = makeInteriorEdges(0.04, tH, 0.04, neonMat);
+    leg.position.set(lx, iy + tH / 2, lz);
+    group.add(leg);
+  });
+
+  // --- 10 chairs around the table ---
+  const seatY = iy + 0.42;
+  const chairSeatH = 0.05, chairBackH = 0.35;
+  const chairW = 0.4, chairD = 0.35;
+
+  // Helper: add 4 legs to a chair at given position
+  function addChairLegs(cx, cz, hw, hd) {
+    const legH = seatY - iy;
+    [[-hw, -hd],[hw, -hd],[-hw, hd],[hw, hd]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, legH, 0.03, neonMat);
+      leg.position.set(cx + lx, iy + legH / 2, cz + lz);
+      group.add(leg);
+    });
+  }
+
+  // 4 chairs on each long side
+  for (let i = 0; i < 4; i++) {
+    const cx = -tW / 2 + 0.5 + i * (tW - 1) / 3;
+    // Back side (negative Z)
+    const bz = -tD / 2 - 0.5;
+    const s1 = makeInteriorEdges(chairW, chairSeatH, chairD, neonMat);
+    s1.position.set(cx, seatY, bz);
+    group.add(s1);
+    addChairLegs(cx, bz, chairW / 2 - 0.04, chairD / 2 - 0.04);
+
+    // Front side (positive Z)
+    const fz = tD / 2 + 0.5;
+    const s2 = makeInteriorEdges(chairW, chairSeatH, chairD, neonMat);
+    s2.position.set(cx, seatY, fz);
+    group.add(s2);
+    addChairLegs(cx, fz, chairW / 2 - 0.04, chairD / 2 - 0.04);
+  }
+
+  // 1 stool on each short end
+  [-tW / 2 - 0.55, tW / 2 + 0.55].forEach(ex => {
+    const s = makeInteriorEdges(chairD, chairSeatH, chairW, neonMat);
+    s.position.set(ex, seatY, 0);
+    group.add(s);
+    const legH = seatY - iy;
+    [[-chairD / 2 + 0.04, -chairW / 2 + 0.04],[chairD / 2 - 0.04, -chairW / 2 + 0.04],
+     [-chairD / 2 + 0.04, chairW / 2 - 0.04],[chairD / 2 - 0.04, chairW / 2 - 0.04]].forEach(([lx, lz]) => {
+      const leg = makeInteriorEdges(0.03, legH, 0.03, neonMat);
+      leg.position.set(ex + lx, iy + legH / 2, lz);
+      group.add(leg);
+    });
+  });
+}
+
+/* ============================================================
+   INTERIOR — AInbox: water cooler + people chatting
+   ============================================================ */
+function createAInboxInterior(group, iy, sz, neonMat) {
+  // --- Circular table (approximated with octagonal edges) ---
+  const tableR = 1.4, tableH = 0.75;
+  const segments = 8;
+  for (let i = 0; i < segments; i++) {
+    const a1 = (i / segments) * Math.PI * 2;
+    const a2 = ((i + 1) / segments) * Math.PI * 2;
+    const x1 = Math.cos(a1) * tableR, z1 = Math.sin(a1) * tableR;
+    const x2 = Math.cos(a2) * tableR, z2 = Math.sin(a2) * tableR;
+    const dx = x2 - x1, dz = z2 - z1;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    const edge = makeInteriorEdges(len, 0.04, 0.04, neonMat);
+    edge.position.set((x1 + x2) / 2, iy + tableH, (z1 + z2) / 2);
+    edge.rotation.y = -Math.atan2(dz, dx);
+    group.add(edge);
+  }
+  // Table pedestal
+  const ped = makeInteriorEdges(0.15, tableH - 0.1, 0.15, neonMat);
+  ped.position.set(0, iy + (tableH - 0.1) / 2, 0);
+  group.add(ped);
+  // Table base
+  const base = makeInteriorEdges(0.8, 0.04, 0.8, neonMat);
+  base.position.set(0, iy + 0.02, 0);
+  group.add(base);
+
+  // --- Water cooler on table ---
+  const coolerH = 0.55;
+  const cooler = makeInteriorEdges(0.25, coolerH, 0.25, neonMat);
+  cooler.position.set(0, iy + tableH + coolerH / 2, 0);
+  group.add(cooler);
+  // Water jug
+  const jug = makeInteriorEdges(0.18, 0.25, 0.18, neonMat);
+  jug.position.set(0, iy + tableH + coolerH + 0.125, 0);
+  group.add(jug);
+  // Tap
+  const tap = makeInteriorEdges(0.06, 0.04, 0.08, neonMat);
+  tap.position.set(0, iy + tableH + coolerH * 0.5, 0.15);
+  group.add(tap);
+
+  // --- Seats around the table ---
+  const numSeats = 6;
+  const seatR = tableR + 0.6;
+  for (let i = 0; i < numSeats; i++) {
+    const ang = (i / numSeats) * Math.PI * 2;
+    const sx = Math.cos(ang) * seatR;
+    const sz2 = Math.sin(ang) * seatR;
+    const chairRot = -ang + Math.PI;
+    // Seat pad
+    const seat = makeInteriorEdges(0.45, 0.05, 0.4, neonMat);
+    seat.position.set(sx, iy + 0.42, sz2);
+    seat.rotation.y = chairRot;
+    group.add(seat);
+    // 4 legs
+    const legH = 0.42, legW = 0.03;
+    const offsets = [[-0.18, -0.15], [0.18, -0.15], [-0.18, 0.15], [0.18, 0.15]];
+    offsets.forEach(([lx, lz]) => {
+      const cosA = Math.cos(chairRot), sinA = Math.sin(chairRot);
+      const wx = lx * cosA - lz * sinA;
+      const wz = lx * sinA + lz * cosA;
+      const leg = makeInteriorEdges(legW, legH, legW, neonMat);
+      leg.position.set(sx + wx, iy + legH / 2, sz2 + wz);
+      group.add(leg);
+    });
+  }
+}
+
+/* ============================================================
+   INTERIOR — Private Office: desk, chair, plant, shelves
+   ============================================================ */
+function createPrivateOfficeInterior(group, iy, sz, neonMat) {
+  // --- Desk (centered, slightly toward back) ---
+  const deskW = 1.8, deskH = 0.75, deskD = 0.8;
+  const deskZ = -0.4;
+  const desk = makeInteriorEdges(deskW, deskH, deskD, neonMat);
+  desk.position.set(0, iy + deskH / 2, deskZ);
+  group.add(desk);
+  // Desk top
+  const top = makeInteriorEdges(deskW + 0.08, 0.04, deskD + 0.04, neonMat);
+  top.position.set(0, iy + deskH + 0.02, deskZ);
+  group.add(top);
+
+  // Monitor on desk
+  const monW = 0.7, monH = 0.45;
+  const monFrame = makeInteriorEdges(monW, monH, 0.03, neonMat);
+  monFrame.position.set(0, iy + deskH + 0.06 + monH / 2, deskZ - 0.15);
+  group.add(monFrame);
+  const monStand = makeInteriorEdges(0.04, 0.06, 0.04, neonMat);
+  monStand.position.set(0, iy + deskH + 0.03, deskZ - 0.15);
+  group.add(monStand);
+
+  // --- Office chair (behind desk) ---
+  const chairZ = deskZ - deskD / 2 - 0.55;
+  const seatY = iy + 0.42;
+  const seat = makeInteriorEdges(0.5, 0.06, 0.45, neonMat);
+  seat.position.set(0, seatY, chairZ);
+  group.add(seat);
+  // Pedestal
+  const pole = makeInteriorEdges(0.05, 0.32, 0.05, neonMat);
+  pole.position.set(0, iy + 0.16, chairZ);
+  group.add(pole);
+  // Base legs
+  for (let a = 0; a < 5; a++) {
+    const ang = (a / 5) * Math.PI * 2;
+    const leg = makeInteriorEdges(0.28, 0.03, 0.03, neonMat);
+    leg.position.set(Math.sin(ang) * 0.16, iy + 0.015, chairZ + Math.cos(ang) * 0.16);
+    leg.rotation.y = -ang;
+    group.add(leg);
+  }
+
+  // --- Corner plant (front-right corner) ---
+  const px = sz.w / 2 - 0.6, pz = sz.d / 2 - 0.6;
+  // Pot
+  const pot = makeInteriorEdges(0.35, 0.3, 0.35, neonMat);
+  pot.position.set(px, iy + 0.15, pz);
+  group.add(pot);
+  // Stem
+  const stem = makeInteriorEdges(0.04, 0.6, 0.04, neonMat);
+  stem.position.set(px, iy + 0.3 + 0.3, pz);
+  group.add(stem);
+  // Leaf clusters (3 angled branches)
+  [[0.25, 0.15], [-0.2, 0.2], [0.05, -0.22]].forEach(([lx, lz]) => {
+    const leaf = makeInteriorEdges(0.3, 0.04, 0.15, neonMat);
+    leaf.position.set(px + lx, iy + 0.75 + Math.random() * 0.2, pz + lz);
+    leaf.rotation.z = (Math.random() - 0.5) * 0.4;
+    group.add(leaf);
+  });
+
+  // --- Shelves on back wall (3 shelves) ---
+  const shelfW = sz.w * 0.5, shelfD = 0.25;
+  for (let s = 0; s < 3; s++) {
+    const shelfY = iy + 1.2 + s * 0.7;
+    const shelf = makeInteriorEdges(shelfW, 0.04, shelfD, neonMat);
+    shelf.position.set(0, shelfY, -sz.d / 2 + shelfD / 2 + 0.1);
+    group.add(shelf);
+    // Shelf brackets (2 small vertical supports)
+    [-shelfW / 2 + 0.1, shelfW / 2 - 0.1].forEach(bx => {
+      const bracket = makeInteriorEdges(0.03, 0.15, 0.03, neonMat);
+      bracket.position.set(bx, shelfY - 0.09, -sz.d / 2 + 0.15);
+      group.add(bracket);
+    });
+  }
+}
+
+/* ============================================================
+   INTERIOR — Theater screen
+   ============================================================ */
+function createTheaterInterior(group, iy, sz, neonMat) {
+  // === STAGE (raised platform at the back) ===
+  const stageD = sz.d * 0.3;
+  const stageH = 0.5;
+  const stageW = sz.w * 0.85;
+  const stageZ = -sz.d / 2 + stageD / 2 + 0.2;
+  const stage = makeInteriorEdges(stageW, stageH, stageD, neonMat);
+  stage.position.set(0, iy + stageH / 2, stageZ);
+  group.add(stage);
+
+  // === STEPS up to stage (3 steps, center front of stage) ===
+  const stepW = 1.8, stepD = 0.35;
+  for (let s = 0; s < 3; s++) {
+    const stepH = stageH * ((s + 1) / 3);
+    const stepZ = stageZ + stageD / 2 + (2 - s) * stepD + stepD / 2;
+    const step = makeInteriorEdges(stepW, stepH, stepD, neonMat);
+    step.position.set(0, iy + stepH / 2, stepZ);
+    group.add(step);
+  }
+
+  // === BIG SCREEN on back wall behind stage ===
+  const screenW = sz.w * 0.85;
+  const screenH = sz.h * 0.55;
+  const screenZ = -sz.d / 2 + 0.15;
+  const screenY = iy + stageH + screenH / 2 + 0.3;
+  addScreen(group, 'wave', screenW, screenH, 0, screenY, screenZ, 0);
+  const frame = makeInteriorEdges(screenW, screenH, 0.05, neonMat);
+  frame.position.set(0, screenY, screenZ);
+  group.add(frame);
+
+  // === ROWS OF SEATS (banks of 5) ===
+  const rows = 4;
+  const seatsPerBank = 5;
+  const seatW = 0.5, seatH = 0.45, seatD = 0.4;
+  const seatGap = 0.15;
+  const bankW = seatsPerBank * (seatW + seatGap) - seatGap;
+  const aisleW = 0.8;
+  const stageFrontZ = stageZ + stageD / 2;
+  const rowStartZ = stageFrontZ + 1.8;
+  const rowSpacing = 1.1;
+
+  // 2 banks per row (left + right of center aisle)
+  for (let r = 0; r < rows; r++) {
+    const rowZ = rowStartZ + r * rowSpacing;
+    if (rowZ > sz.d / 2 - 0.5) continue;
+
+    [-1, 1].forEach(side => {
+      const bankCenterX = side * (aisleW / 2 + bankW / 2);
+      for (let s = 0; s < seatsPerBank; s++) {
+        const sx = bankCenterX - bankW / 2 + s * (seatW + seatGap) + seatW / 2;
+        if (Math.abs(sx) > sz.w / 2 - 0.4) continue;
+        // Seat
+        const seat = makeInteriorEdges(seatW, 0.05, seatD, neonMat);
+        seat.position.set(sx, iy + seatH, rowZ);
+        group.add(seat);
+        // 2 side supports (theater-style legs)
+        [-seatW / 2 + 0.03, seatW / 2 - 0.03].forEach(dx => {
+          const leg = makeInteriorEdges(0.03, seatH, 0.03, neonMat);
+          leg.position.set(sx + dx, iy + seatH / 2, rowZ);
+          group.add(leg);
+        });
+      }
+    });
+  }
+}
+
+/* ============================================================
+   INTERIOR — Video Studio recording setup
+   ============================================================ */
+function createVideoStudioInterior(group, iy, sz, neonMat) {
+  const redMat = new THREE.MeshBasicMaterial({ color: 0x661111 });
+  const ceilY = iy + sz.h;
+
+  // === CAMERA ON TRIPOD (centered) ===
+  // Three splayed tripod legs
+  [[-0.2, 0.2], [0.2, 0.2], [0, -0.25]].forEach(([lx, lz]) => {
+    const leg = makeInteriorEdges(0.03, 1.1, 0.03, neonMat);
+    leg.position.set(lx, iy + 0.55, lz);
+    group.add(leg);
+  });
+  // Tripod head
+  const tripodHead = makeInteriorEdges(0.4, 0.06, 0.06, neonMat);
+  tripodHead.position.set(0, iy + 1.15, 0);
+  group.add(tripodHead);
+  // Camera body
+  const camBody = makeInteriorEdges(0.6, 0.35, 0.4, neonMat);
+  camBody.position.set(0, iy + 1.4, 0);
+  group.add(camBody);
+  // Lens barrel
+  const lens = makeInteriorEdges(0.15, 0.15, 0.3, neonMat);
+  lens.position.set(0, iy + 1.38, -0.3);
+  group.add(lens);
+  // Viewfinder
+  const viewfinder = makeInteriorEdges(0.12, 0.1, 0.15, neonMat);
+  viewfinder.position.set(-0.15, iy + 1.63, 0.1);
+  group.add(viewfinder);
+  // Record indicator
+  const rec = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), redMat);
+  rec.position.set(0.28, iy + 1.55, 0);
+  group.add(rec);
+
+  // === BACKDROP (large panel on back wall) ===
+  const backdrop = makeInteriorEdges(sz.w * 0.65, sz.h * 0.75, 0.05, neonMat);
+  backdrop.position.set(0, iy + sz.h * 0.42, -sz.d/2 + 0.3);
+  group.add(backdrop);
+
+  // === TWO LAMPS HANGING FROM CEILING ===
+  [[-sz.w * 0.25, -sz.d * 0.15], [sz.w * 0.25, sz.d * 0.15]].forEach(([lx, lz]) => {
+    // Vertical rod hanging from ceiling
+    const rod = makeInteriorEdges(0.03, 0.8, 0.03, neonMat);
+    rod.position.set(lx, ceilY - 0.4, lz);
+    group.add(rod);
+    // Lamp housing (rectangular softbox)
+    const housing = makeInteriorEdges(0.5, 0.1, 0.4, neonMat);
+    housing.position.set(lx, ceilY - 0.85, lz);
+    group.add(housing);
+  });
+}
+
+/* ============================================================
+   ENVIRONMENT
+   ============================================================ */
+function createEnvironment() {
+  // Dark ground plane
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(300, 300),
+    new THREE.MeshStandardMaterial({ color: 0x020206, roughness: 1 })
+  );
+  ground.rotation.x = -Math.PI/2;
+  ground.position.y = -0.02;
+  ground.matrixAutoUpdate = false;
+  ground.updateMatrix();
+  scene.add(ground);
+
+  // Tron grid
+  createTronGrid();
+  createRoads();
+  createVehicles();
+}
+
+function createTronGrid() {
+  const extent = 100;
+  // Minor grid lines (every 2 units)
+  gridMinorMat = new THREE.LineBasicMaterial({ color: 0x33280f, transparent: true, opacity: 0.5 });
+  const minorMat = gridMinorMat;
+  const minorVerts = [];
+  for (let i = -extent; i <= extent; i += 2) {
+    minorVerts.push(-extent, 0, i, extent, 0, i);
+    minorVerts.push(i, 0, -extent, i, 0, extent);
+  }
+  const minorGeo = new THREE.BufferGeometry();
+  minorGeo.setAttribute('position', new THREE.Float32BufferAttribute(minorVerts, 3));
+  scene.add(new THREE.LineSegments(minorGeo, minorMat));
+
+  // Major grid lines (every 10 units)
+  gridMajorMat = new THREE.LineBasicMaterial({ color: 0x665520, transparent: true, opacity: 0.8 });
+  const majorMat = gridMajorMat;
+  const majorVerts = [];
+  for (let i = -extent; i <= extent; i += 10) {
+    majorVerts.push(-extent, 0, i, extent, 0, i);
+    majorVerts.push(i, 0, -extent, i, 0, extent);
+  }
+  const majorGeo = new THREE.BufferGeometry();
+  majorGeo.setAttribute('position', new THREE.Float32BufferAttribute(majorVerts, 3));
+  scene.add(new THREE.LineSegments(majorGeo, majorMat));
+
+  // Horizon glow strips (thin emissive planes at grid edges)
+  gridGlowMat = new THREE.MeshBasicMaterial({ color: 0x554418, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+  const glowMat = gridGlowMat;
+  [[-extent,0],[extent,0],[0,-extent],[0,extent]].forEach(([x,z], i) => {
+    const isX = i < 2;
+    const strip = new THREE.Mesh(
+      new THREE.PlaneGeometry(isX ? 0.3 : extent*2, isX ? extent*2 : 0.3),
+      glowMat
+    );
+    strip.rotation.x = -Math.PI/2;
+    strip.position.set(x, 0.01, z);
+    strip.matrixAutoUpdate = false;
+    strip.updateMatrix();
+    scene.add(strip);
+  });
+}
+
+function createRoads() {
+  const t = COLOR_THEMES[activeTheme];
+  roadSurfaceMats = []; roadEdgeMats = [];
+
+  // Road surface — subtle glow tint
+  const surfMat1 = new THREE.MeshBasicMaterial({ color: t.gridMinor, transparent: true, opacity: 0.12 });
+  const surfMat2 = new THREE.MeshBasicMaterial({ color: t.gridMinor, transparent: true, opacity: 0.12 });
+  roadSurfaceMats.push(surfMat1, surfMat2);
+
+  // Edge lines — bright theme color
+  const edgeColor = t.gridMajor;
+  const makeEdgeMat = (op) => {
+    const m = new THREE.MeshBasicMaterial({ color: edgeColor, transparent: true, opacity: op });
+    roadEdgeMats.push(m);
+    return m;
+  };
+
+  // Center dashed line material
+  roadCenterMat = new THREE.MeshBasicMaterial({ color: t.bright, transparent: true, opacity: 0.5 });
+
+  // --- Road X (z=20) ---
+  const roadX = new THREE.Mesh(new THREE.PlaneGeometry(120, 6), surfMat1);
+  roadX.rotation.x = -Math.PI/2; roadX.position.set(0, 0.01, 20);
+  roadX.matrixAutoUpdate = false; roadX.updateMatrix();
+  scene.add(roadX);
+
+  // Outer edge glow strips (wide faint)
+  [-3, 3].forEach(off => {
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(120, 0.5), makeEdgeMat(0.08));
+    glow.rotation.x = -Math.PI/2; glow.position.set(0, 0.015, 20 + off);
+    glow.matrixAutoUpdate = false; glow.updateMatrix();
+    scene.add(glow);
+  });
+  // Outer edge lines (sharp bright)
+  [-3, 3].forEach(off => {
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(120, 0.08), makeEdgeMat(0.6));
+    line.rotation.x = -Math.PI/2; line.position.set(0, 0.02, 20 + off);
+    line.matrixAutoUpdate = false; line.updateMatrix();
+    scene.add(line);
+  });
+  // Center dashes (merged into single geometry)
+  const dashXGeos = [];
+  for (let dx = -60; dx < 60; dx += 4) {
+    const g = new THREE.PlaneGeometry(1.5, 0.05);
+    g.rotateX(-Math.PI/2);
+    g.translate(dx, 0.02, 20);
+    dashXGeos.push(g);
+  }
+  const dashXMerged = new THREE.Mesh(mergeGeometries(dashXGeos), roadCenterMat);
+  dashXGeos.forEach(g => g.dispose());
+  dashXMerged.matrixAutoUpdate = false;
+  dashXMerged.updateMatrix();
+  scene.add(dashXMerged);
+
+  // --- Road Z (x=42) ---
+  const roadZ = new THREE.Mesh(new THREE.PlaneGeometry(6, 120), surfMat2);
+  roadZ.rotation.x = -Math.PI/2; roadZ.position.set(42, 0.01, 0);
+  roadZ.matrixAutoUpdate = false; roadZ.updateMatrix();
+  scene.add(roadZ);
+
+  // Outer edge glow strips
+  [-3, 3].forEach(off => {
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 120), makeEdgeMat(0.08));
+    glow.rotation.x = -Math.PI/2; glow.position.set(42 + off, 0.015, 0);
+    glow.matrixAutoUpdate = false; glow.updateMatrix();
+    scene.add(glow);
+  });
+  // Outer edge lines
+  [-3, 3].forEach(off => {
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 120), makeEdgeMat(0.6));
+    line.rotation.x = -Math.PI/2; line.position.set(42 + off, 0.02, 0);
+    line.matrixAutoUpdate = false; line.updateMatrix();
+    scene.add(line);
+  });
+  // Center dashes (merged into single geometry)
+  const dashZGeos = [];
+  for (let dz = -60; dz < 60; dz += 4) {
+    const g = new THREE.PlaneGeometry(0.05, 1.5);
+    g.rotateX(-Math.PI/2);
+    g.translate(42, 0.02, dz);
+    dashZGeos.push(g);
+  }
+  const dashZMerged = new THREE.Mesh(mergeGeometries(dashZGeos), roadCenterMat);
+  dashZGeos.forEach(g => g.dispose());
+  dashZMerged.matrixAutoUpdate = false;
+  dashZMerged.updateMatrix();
+  scene.add(dashZMerged);
+}
+
+function createVehicles() {
+  const theme = COLOR_THEMES[activeTheme];
+  const bikeColors = theme.bikeColors;
+  const configs = [
+    { road:'x', z:19, dir:1, speed:12+Math.random()*6 },
+    { road:'x', z:21, dir:-1, speed:10+Math.random()*6 },
+    { road:'x', z:18.5, dir:1, speed:16+Math.random()*4 },
+    { road:'z', x:41, dir:1, speed:10+Math.random()*6 },
+    { road:'z', x:43, dir:-1, speed:14+Math.random()*4 },
+    { road:'z', x:40.5, dir:1, speed:12+Math.random()*4 },
+  ];
+  configs.forEach((cfg, ci) => {
+    const g = new THREE.Group();
+    const col = bikeColors[ci % bikeColors.length];
+    const glowMat = new THREE.MeshBasicMaterial({ color: col });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x0a0a12, roughness: 0.7 });
+    const tailMat = new THREE.MeshBasicMaterial({ color: 0x661122 });
+
+    // Car body
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.8), darkMat));
+    // Cabin
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.7), darkMat);
+    cabin.position.set(-0.1 * cfg.dir, 0.35, 0);
+    g.add(cabin);
+
+    // Neon headlights (two bright dots on front)
+    [0.25, -0.25].forEach(dz => {
+      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.14), glowMat);
+      hl.position.set(0.9 * cfg.dir, 0.05, dz);
+      g.add(hl);
+    });
+
+    // Tail lights (dim red)
+    [0.25, -0.25].forEach(dz => {
+      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.12), tailMat);
+      tl.position.set(-0.92 * cfg.dir, 0.05, dz);
+      g.add(tl);
+    });
+
+    // Neon underflow strip
+    const stripMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6 });
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.7), stripMat);
+    strip.rotation.x = -Math.PI / 2;
+    strip.position.y = -0.19;
+    g.add(strip);
+
+    // Headlight ground glow
+    const groundGlowMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+    const groundGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), groundGlowMat);
+    groundGlow.rotation.x = -Math.PI / 2;
+    groundGlow.position.set(0.6 * cfg.dir, -0.19, 0);
+    g.add(groundGlow);
+
+    // Light trail — a series of segments that fade out behind the car
+    const trailCount = 20;
+    const trailMats = [];
+    const trailMeshes = [];
+    for (let ti = 0; ti < trailCount; ti++) {
+      const tMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, side: THREE.DoubleSide });
+      const tMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.08), tMat);
+      tMesh.rotation.x = -Math.PI / 2;
+      tMesh.position.y = 0.02;
+      tMesh.visible = false;
+      scene.add(tMesh);
+      trailMats.push(tMat);
+      trailMeshes.push(tMesh);
+    }
+
+    // Store material refs for theming
+    bikeMats.push({ strip: stripMat, glow: glowMat, trail: stripMat, groundGlow: groundGlowMat, trailMats });
+
+    const startPos = (Math.random() - 0.5) * 100;
+    if (cfg.road === 'x') { g.position.set(startPos, 0.3, cfg.z); }
+    else { g.position.set(cfg.x, 0.3, startPos); g.rotation.y = Math.PI / 2; }
+    scene.add(g);
+    vehicles.push({ group: g, ...cfg, pos: startPos, trailMeshes, trailMats, trailIdx: 0, trailTimer: 0 });
+  });
+}
+
+
+/* ============================================================
+   LIGHTING
+   ============================================================ */
+function setupLighting() {
+  scene.add(new THREE.HemisphereLight(0x111122, 0x040408, 0.35));
+  const dir = new THREE.DirectionalLight(0xaabbcc, 0.25);
+  dir.position.set(25, 40, 25);
+  scene.add(dir);
+
+  [[0,3,7],[0,10,-7],[16,16,0],[-16,22,0]].forEach(p => {
+    const al = new THREE.PointLight(WARM_LIGHT, 0.25, 25, 2);
+    al.position.set(...p); scene.add(al);
+  });
+}
+
+/* ============================================================
+   INTERACTIVITY
+   ============================================================ */
+function onPointerMove(e) {
+  if (isRecording) return;
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  mouseMoved = true;
+  lastInteraction = Date.now();
+}
+
+function checkHover() {
+  if (isRecording || camAnim.active || layoutAnim.active) return;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(roomGlassMeshes);
+  let newHover = -1;
+  if (hits.length > 0) newHover = roomGlassMeshes.indexOf(hits[0].object);
+
+  if (newHover !== hoveredRoom) {
+    // Restore previous hover
+    if (hoveredRoom >= 0 && hoveredRoom !== selectedRoom && roomNeonMats[hoveredRoom]) {
+      roomNeonMats[hoveredRoom].color.setHex(NEON_BRIGHT);
+      if (roomLabels[hoveredRoom]) roomLabels[hoveredRoom].classList.remove('visible');
+    }
+    // Apply new hover — never show hover labels when a room is selected
+    if (newHover >= 0 && newHover !== selectedRoom) {
+      roomNeonMats[newHover].color.setHex(NEON_GOLD);
+      if (selectedRoom < 0 && roomLabels[newHover]) roomLabels[newHover].classList.add('visible');
+      document.body.style.cursor = 'pointer';
+    } else if (newHover < 0) {
+      document.body.style.cursor = 'default';
+    }
+    hoveredRoom = newHover;
+  }
+
+}
+
+function syncLabels() {
+  roomLabels.forEach((lbl, i) => {
+    if (!lbl) return;
+    if (selectedRoom >= 0 && i === selectedRoom) lbl.classList.add('visible');
+    else if (selectedRoom < 0 && i === hoveredRoom) lbl.classList.add('visible');
+    else lbl.classList.remove('visible');
+  });
+}
+
+function onClick(e) {
+  if (isRecording || e.button !== 0) return;
+  lastInteraction = Date.now();
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(roomGlassMeshes);
+  if (hits.length > 0) {
+    const idx = roomGlassMeshes.indexOf(hits[0].object);
+    if (idx >= 0) { stopAutoTour(); focusRoom(idx); }
+  }
+}
+
+function onContextMenu(e) {
+  e.preventDefault();
+  lastInteraction = Date.now();
+  stopAutoTour();
+  resetView();
+}
+
+function focusRoom(idx) {
+  if (idx < 0 || idx >= NUM_ROOMS) return;
+  roomLabels.forEach((lbl, i) => { if (lbl) lbl.classList.remove('visible'); });
+  hoveredRoom = -1;
+  selectedRoom = idx;
+  for (let i = 0; i < NUM_ROOMS; i++) {
+    setRoomGroupOpacity(i, i === idx ? 1.0 : 0.4);
+  }
+  roomLabels[idx].classList.add('visible');
+  syncLabels();
+  animateCamera(ROOM_CAM[idx].pos, ROOM_CAM[idx].target);
+  if (!isRecording) setTimeout(() => showOverlay(idx), 800);
+  document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.room) === idx);
+    if (parseInt(btn.dataset.room) === idx) {
+      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  });
+}
+
+function resetView() {
+  hideOverlay();
+  // Restore all rooms to normal brightness
+  for (let i = 0; i < NUM_ROOMS; i++) {
+    setRoomGroupOpacity(i, 1.0);
+    if (roomNeonMats[i]) roomNeonMats[i].color.setHex(NEON_BRIGHT);
+    if (roomLights[i]) roomLights[i].intensity = 3.0;
+    if (roomGlowLights[i]) roomGlowLights[i].intensity = 1.5;
+    if (roomLabels[i]) roomLabels[i].classList.remove('visible');
+    if (roomInteriorRefs[i]) setInteriorOpacity(roomInteriorRefs[i], 1.0);
+    if (roomGlowBoxes[i]) { roomGlowBoxes[i].color.setHex(NEON_BRIGHT); roomGlowBoxes[i].opacity = 0; }
+  }
+  selectedRoom = -1;
+  syncLabels();
+  animateCamera(OVERVIEW_POS, OVERVIEW_TARGET);
+  document.querySelectorAll('#floor-panel button[data-room]').forEach(btn => btn.classList.remove('active'));
+}
+
+function animateCamera(targetPos, targetLookAt, duration = 1.4) {
+  camAnim.startPos.copy(camera.position);
+  camAnim.endPos.copy(targetPos);
+  camAnim.startTarget.copy(controls.target);
+  camAnim.endTarget.copy(targetLookAt);
+  camAnim.progress = 0;
+  camAnim.duration = duration;
+  camAnim.active = true;
+  controls.autoRotate = false;
+}
+
+function showOverlay(idx) {
+  document.getElementById('overlay-floor-num').textContent = `Floor ${ROOM_FLOOR[idx] + 1}`;
+  document.getElementById('overlay-title').textContent = ROOM_INFO[idx].name;
+  document.getElementById('overlay-desc').textContent = ROOM_INFO[idx].desc;
+  const overlay = document.getElementById('info-overlay');
+  overlay.style.display = 'block';
+
+  // On mobile, CSS handles centering via transform
+  if (window.innerWidth <= 768) {
+    overlay.style.left = '';
+    overlay.style.top = '';
+    return;
+  }
+
+  // Position tooltip to the right of the active room button
+  const btn = document.querySelector(`#floor-panel button[data-room="${idx}"]`);
+  if (btn) {
+    const rect = btn.getBoundingClientRect();
+    overlay.style.left = rect.right + 'px';
+    overlay.style.top = Math.max(8, rect.top - 20) + 'px';
+  }
+}
+
+function hideOverlay() {
+  document.getElementById('info-overlay').style.display = 'none';
+}
+
+/* ============================================================
+   LAYOUT SWITCHING
+   ============================================================ */
+function applyLayout(presetIdx) {
+  if (presetIdx === activeLayout) return;
+
+  // Capture old positions before anything changes
+  const oldPositions = [];
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    if (roomGroupRefs[ri]) {
+      const p = roomGroupRefs[ri].position;
+      oldPositions[ri] = { x: p.x, y: p.y, z: p.z };
+    } else {
+      oldPositions[ri] = ROOM_POS[ri] ? { ...ROOM_POS[ri] } : { x: 0, y: 0, z: 0 };
+    }
+  }
+
+  activeLayout = presetIdx;
+
+  // Reset selection
+  hoveredRoom = -1; selectedRoom = -1;
+  hideOverlay();
+  document.body.style.cursor = 'default';
+
+  // Rebuild with new layout
+  clearBuilding();
+  computePositions(LAYOUT_PRESETS[presetIdx]);
+  createBuilding();
+  buildFloorPanel();
+  if (autoTourInterval) {
+    // Re-focus current tour room after rebuild
+    const order = getAutoTourOrder();
+    const ri = order[autoTourIdx % order.length];
+    focusRoom(ri);
+  } else {
+    resetView();
+  }
+
+  // Set up animation: start each room at its old position, animate to new
+  layoutAnim.startPositions = [];
+  layoutAnim.endPositions = [];
+  for (let ri = 0; ri < NUM_ROOMS; ri++) {
+    layoutAnim.startPositions[ri] = oldPositions[ri];
+    layoutAnim.endPositions[ri] = { ...ROOM_POS[ri] };
+    // Place room at old position to start
+    if (roomGroupRefs[ri]) {
+      roomGroupRefs[ri].position.set(oldPositions[ri].x, oldPositions[ri].y, oldPositions[ri].z);
+    }
+  }
+  layoutAnim.progress = 0;
+  layoutAnim.duration = 1.0;
+  layoutAnim.active = true;
+
+  // Update selector buttons
+  document.querySelectorAll('#right-panel button[data-layout]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.layout) === presetIdx);
+  });
+}
+
+function buildFloorPanel() {
+  const panel = document.getElementById('floor-panel');
+  panel.innerHTML = '';
+
+  // Wrapper keeps room buttons vertically centered
+  const wrap = document.createElement('div');
+  wrap.className = 'floor-buttons';
+
+  // Overview button
+  const ovBtn = document.createElement('button');
+  ovBtn.className = 'overview';
+  ovBtn.dataset.action = 'overview';
+  ovBtn.textContent = '◎ Overview';
+  ovBtn.addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); resetView(); });
+  wrap.appendChild(ovBtn);
+
+  // Room buttons grouped by floor (top floor first)
+  const floors = FLOOR_LAYOUT;
+  for (let fi = floors.length - 1; fi >= 0; fi--) {
+    const label = document.createElement('div');
+    label.className = 'floor-group-label';
+    label.textContent = `Floor ${fi + 1}`;
+    wrap.appendChild(label);
+
+    floors[fi].forEach(ri => {
+      const btn = document.createElement('button');
+      btn.dataset.room = ri;
+      btn.textContent = ROOM_INFO[ri].name;
+      btn.addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); focusRoom(ri); });
+      wrap.appendChild(btn);
+    });
+  }
+  panel.appendChild(wrap);
+
+  // Autoplay toggle button — pinned at bottom
+  const autoBtn = document.createElement('button');
+  autoBtn.id = 'autoplay-toggle';
+  autoBtn.textContent = autoTourInterval ? '■ Stop Tour' : '▶ Auto Tour';
+  autoBtn.addEventListener('click', () => {
+    if (autoTourInterval) {
+      stopAutoTour();
+    } else {
+      startAutoTour();
+    }
+  });
+  // Remove old autoplay button if it exists, then append to body (not panel)
+  const oldAuto = document.getElementById('autoplay-toggle');
+  if (oldAuto) oldAuto.remove();
+  document.body.appendChild(autoBtn);
+}
+
+/* ============================================================
+   THEME SWITCHING
+   ============================================================ */
+function applyTheme(idx) {
+  activeTheme = idx;
+  const t = COLOR_THEMES[idx];
+
+  // Update JS color constants
+  NEON = t.neon; NEON_GOLD = t.gold; NEON_BRIGHT = t.bright; WARM_LIGHT = t.warm;
+
+  // Update CSS custom properties
+  const root = document.documentElement.style;
+  root.setProperty('--accent', t.cssAccent);
+  root.setProperty('--accent-hex', t.cssAccentHex);
+  root.setProperty('--bright', t.cssBright);
+  root.setProperty('--bright-hex', t.cssBrightHex);
+
+  // Update grid materials
+  if (gridMinorMat) gridMinorMat.color.setHex(t.gridMinor);
+  if (gridMajorMat) gridMajorMat.color.setHex(t.gridMajor);
+  if (gridGlowMat) gridGlowMat.color.setHex(t.gridGlow);
+
+  // Update road materials
+  roadSurfaceMats.forEach(m => m.color.setHex(t.gridMinor));
+  roadEdgeMats.forEach(m => m.color.setHex(t.gridMajor));
+  if (roadCenterMat) roadCenterMat.color.setHex(t.bright);
+
+  // Update bike materials
+  bikeMats.forEach((bm, i) => {
+    const col = t.bikeColors[i % t.bikeColors.length];
+    bm.strip.color.setHex(col);
+    bm.glow.color.setHex(col);
+    bm.trail.color.setHex(col);
+    bm.groundGlow.color.setHex(col);
+    if (bm.trailMats) bm.trailMats.forEach(tm => tm.color.setHex(col));
+  });
+
+  // Update room glow lights
+  roomGlowLights.forEach(gl => { if (gl) gl.color.setHex(t.glowLight); });
+
+  // Rebuild building to pick up new neon colors
+  const wasSelected = selectedRoom;
+  clearBuilding();
+  createBuilding();
+  if (wasSelected >= 0) focusRoom(wasSelected);
+  syncLabels();
+
+  // Update swatch active state
+  document.querySelectorAll('#right-panel .theme-btn').forEach(s => {
+    s.classList.toggle('active', parseInt(s.dataset.theme) === idx);
+  });
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init() {
+  clock = new THREE.Clock();
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x020204);
+  scene.fog = new THREE.FogExp2(0x020204, 0.006);
+
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.5, 500);
+  camera.position.copy(OVERVIEW_POS);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  document.body.prepend(renderer.domElement);
+
+  labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.domElement.style.position = 'absolute';
+  labelRenderer.domElement.style.top = '0';
+  labelRenderer.domElement.style.left = '0';
+  labelRenderer.domElement.style.pointerEvents = 'none';
+  document.body.appendChild(labelRenderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.target.copy(OVERVIEW_TARGET);
+  controls.minDistance = 10;
+  controls.maxDistance = 200;
+  controls.maxPolarAngle = Math.PI * 0.48;
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.3;
+
+  setupLighting();
+
+  // Compute initial layout and build
+  computePositions(LAYOUT_PRESETS[activeLayout]);
+  createBuilding();
+  buildFloorPanel();
+  createEnvironment();
+  applyTheme(6);
+
+  // Event listeners
+  renderer.domElement.addEventListener('pointermove', onPointerMove);
+  renderer.domElement.addEventListener('click', onClick);
+  renderer.domElement.addEventListener('contextmenu', onContextMenu);
+  window.addEventListener('resize', onResize);
+
+  // Layout selector
+  document.querySelectorAll('#right-panel button[data-layout]').forEach(btn => {
+    btn.addEventListener('click', () => applyLayout(parseInt(btn.dataset.layout)));
+  });
+
+  // Theme swatches
+  document.querySelectorAll('#right-panel .theme-btn').forEach(s => {
+    s.addEventListener('click', () => applyTheme(parseInt(s.dataset.theme)));
+  });
+
+  // Overlay buttons
+  document.getElementById('overlay-close-btn').addEventListener('click', hideOverlay);
+  document.getElementById('overlay-overview-btn').addEventListener('click', () => { lastInteraction = Date.now(); stopAutoTour(); resetView(); });
+
+  // Duration +/- buttons
+  document.querySelectorAll('.dur-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const delta = parseInt(btn.dataset.delta);
+      exportRoomDuration = Math.max(1, Math.min(10, exportRoomDuration + delta));
+      document.getElementById('dur-value').textContent = exportRoomDuration + 's';
+    });
+  });
+
+  // Export preset buttons
+  document.querySelectorAll('.export-btn').forEach(btn => {
+    btn.addEventListener('click', () => recordVideo(btn.dataset.export));
+  });
+
+  document.getElementById('export-png').addEventListener('click', exportPNG);
+
+  // Mobile settings toggle
+  document.getElementById('mobile-settings-btn').addEventListener('click', () => {
+    document.getElementById('right-panel').classList.toggle('open');
+    document.getElementById('floor-panel').classList.remove('open');
+  });
+
+  document.getElementById('mobile-floors-btn').addEventListener('click', () => {
+    document.getElementById('floor-panel').classList.toggle('open');
+    document.getElementById('right-panel').classList.remove('open');
+  });
+
+  // Close panels when clicking outside on mobile
+  renderer.domElement.addEventListener('pointerdown', () => {
+    document.getElementById('right-panel').classList.remove('open');
+    document.getElementById('floor-panel').classList.remove('open');
+  });
+
+  // Start auto-tour
+  startAutoTour();
+
+  animate();
+}
+
+/* ============================================================
+   AUTO-TOUR — cycles through rooms bottom to top
+   ============================================================ */
+let autoTourInterval = null;
+let autoTourIdx = 0;
+
+function getAutoTourOrder() {
+  const order = [];
+  for (let fi = FLOOR_LAYOUT.length - 1; fi >= 0; fi--) {
+    FLOOR_LAYOUT[fi].forEach(ri => order.push(ri));
+  }
+  return order;
+}
+
+function updateAutoplayButton() {
+  const btn = document.getElementById('autoplay-toggle');
+  if (btn) btn.textContent = autoTourInterval ? '■ Stop Tour' : '▶ Auto Tour';
+}
+
+function startAutoTour() {
+  clearInterval(autoTourInterval);
+  const order = getAutoTourOrder();
+  autoTourIdx = -1;
+  resetView();
+  autoTourInterval = setInterval(() => {
+    autoTourIdx++;
+    if (autoTourIdx >= order.length) {
+      autoTourIdx = -1;
+      resetView();
+    } else {
+      focusRoom(order[autoTourIdx]);
+    }
+  }, 2000);
+  updateAutoplayButton();
+}
+
+function startAutoTourFrom(roomIdx) {
+  clearInterval(autoTourInterval);
+  const order = getAutoTourOrder();
+  autoTourIdx = order.indexOf(roomIdx);
+  if (autoTourIdx < 0) autoTourIdx = 0;
+  autoTourInterval = setInterval(() => {
+    autoTourIdx++;
+    if (autoTourIdx >= order.length) {
+      autoTourIdx = -1;
+      resetView();
+    } else {
+      focusRoom(order[autoTourIdx]);
+    }
+  }, 2000);
+  updateAutoplayButton();
+}
+
+function stopAutoTour() {
+  clearInterval(autoTourInterval);
+  autoTourInterval = null;
+  updateAutoplayButton();
+}
+
+/* ============================================================
+   VIDEO EXPORT
+   ============================================================ */
+const EXPORT_PRESETS = {
+  mp4: { w: 1920, h: 1080, name: 'roam-office' },
+};
+let exportRoomDuration = 2;
+let isRecording = false;
+
+function drawExportOverlays(ctx, w, h) {
+  const includeLogo = document.getElementById('export-logo')?.checked ?? false;
+  const includeUI = document.getElementById('export-ui-overlay')?.checked ?? false;
+
+  if (includeUI) {
+    const cs = getComputedStyle(document.documentElement);
+    const accentRGB = cs.getPropertyValue('--accent').trim();
+    const brightHex = cs.getPropertyValue('--bright-hex').trim();
+    const topH = Math.round(h * 0.035);
+    const botH = Math.round(h * 0.016);
+    const leftW = Math.round(w * 0.078);
+    const fontSize = Math.max(8, Math.round(h * 0.008));
+    const labelFont = `${fontSize}px 'SF Mono', Consolas, monospace`;
+
+    // Top bar
+    ctx.fillStyle = 'rgba(2,3,8,0.75)';
+    ctx.fillRect(0, 0, w, topH);
+    ctx.strokeStyle = `rgba(${accentRGB},0.25)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, topH); ctx.lineTo(w, topH); ctx.stroke();
+    ctx.font = labelFont;
+    ctx.fillStyle = `rgba(${accentRGB},0.4)`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ROAM VIRTUAL OFFICE', Math.round(w * 0.012), topH / 2);
+
+    // Bottom bar
+    ctx.fillStyle = 'rgba(2,3,8,0.65)';
+    ctx.fillRect(0, h - botH, w, botH);
+    ctx.strokeStyle = `rgba(${accentRGB},0.25)`;
+    ctx.beginPath(); ctx.moveTo(0, h - botH); ctx.lineTo(w, h - botH); ctx.stroke();
+    ctx.font = labelFont;
+    ctx.fillStyle = `rgba(${accentRGB},0.3)`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ROAM MAKES REMOTE WORK', Math.round(w * 0.012), h - botH / 2);
+    const rightText = 'FUTURE OF WORK';
+    const rm = ctx.measureText(rightText);
+    ctx.fillText(rightText, w - rm.width - Math.round(w * 0.012), h - botH / 2);
+
+    // Left panel
+    const grad = ctx.createLinearGradient(0, 0, leftW, 0);
+    grad.addColorStop(0, 'rgba(2,3,8,0.55)');
+    grad.addColorStop(1, 'rgba(2,3,8,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, topH, leftW, h - topH - botH);
+    ctx.strokeStyle = `rgba(${accentRGB},0.15)`;
+    ctx.beginPath(); ctx.moveTo(leftW, topH); ctx.lineTo(leftW, h - botH); ctx.stroke();
+
+    // Floor labels
+    const btns = document.querySelectorAll('#floor-panel button[data-room]');
+    if (btns.length > 0) {
+      const areaH = h - topH - botH;
+      const btnH = Math.round(areaH / (btns.length + 2));
+      const startY = topH + (areaH - btns.length * btnH) / 2;
+      ctx.font = `${Math.max(7, Math.round(h * 0.007))}px 'SF Mono', Consolas, monospace`;
+      btns.forEach((btn, i) => {
+        ctx.fillStyle = btn.classList.contains('active') ? brightHex : `rgba(${accentRGB},0.45)`;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(btn.textContent, Math.round(w * 0.008), startY + i * btnH + btnH / 2);
+      });
+    }
+
+    // Corner brackets
+    const cornerLen = Math.round(h * 0.018);
+    ctx.strokeStyle = `rgba(${accentRGB},0.4)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cornerLen, topH); ctx.lineTo(0, topH); ctx.lineTo(0, topH + cornerLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - cornerLen, topH); ctx.lineTo(w, topH); ctx.lineTo(w, topH + cornerLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cornerLen, h - botH); ctx.lineTo(0, h - botH); ctx.lineTo(0, h - botH - cornerLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - cornerLen, h - botH); ctx.lineTo(w, h - botH); ctx.lineTo(w, h - botH - cornerLen); ctx.stroke();
+  }
+
+  if (includeLogo && exportLogoImg?.complete) {
+    const lh = Math.round(h * 0.04);
+    const lw = Math.round(lh * (exportLogoImg.naturalWidth / exportLogoImg.naturalHeight));
+    ctx.drawImage(exportLogoImg, (w - lw) / 2, Math.round(h * 0.03), lw, lh);
+  }
+}
+
+function exportPNG() {
+  if (isRecording) return;
+  const w = 1920, h = 1080;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = w;
+  outCanvas.height = h;
+  const ctx = outCanvas.getContext('2d');
+  ctx.drawImage(renderer.domElement, 0, 0);
+  drawExportOverlays(ctx, w, h);
+
+  outCanvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'roam-office.png';
+    a.click();
+    URL.revokeObjectURL(url);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  }, 'image/png');
+}
+
+function waitForCameraAnim() {
+  return new Promise(resolve => {
+    const check = () => camAnim.active ? requestAnimationFrame(check) : resolve();
+    check();
+  });
+}
+
+function waitSeconds(s) {
+  return new Promise(resolve => setTimeout(resolve, s * 1000));
+}
+
+async function recordVideo(presetKey) {
+  const preset = EXPORT_PRESETS[presetKey];
+  if (!preset || isRecording) return;
+  isRecording = true;
+  stopAutoTour();
+  hideOverlay();
+
+  const recIndicator = document.getElementById('rec-indicator');
+  const recLabel = document.getElementById('rec-label');
+  recIndicator.classList.remove('downloaded');
+  recLabel.textContent = 'Recording...';
+  recIndicator.classList.add('active');
+
+  const clickedBtn = document.querySelector(`.export-btn[data-export="${presetKey}"]`);
+  clickedBtn.classList.add('exporting');
+  document.querySelectorAll('.export-btn').forEach(b => b.disabled = true);
+
+  let recCapturing = false;
+
+  try {
+    const needsComposite = document.getElementById('export-ui-overlay')?.checked || document.getElementById('export-logo')?.checked;
+    const ew = preset.w;
+    const eh = preset.h;
+
+    // Resize renderer to export dimensions
+    renderer.setSize(ew, eh);
+    camera.aspect = ew / eh;
+    camera.updateProjectionMatrix();
+
+    const w = ew;
+    const h = eh;
+    let stream, recCanvas, recCtx;
+
+    if (needsComposite) {
+      recCanvas = document.createElement('canvas');
+      recCanvas.width = w;
+      recCanvas.height = h;
+      recCtx = recCanvas.getContext('2d');
+      stream = recCanvas.captureStream(60);
+      recCapturing = true;
+
+      function drawCompositeFrame() {
+        if (!recCapturing) return;
+        recCtx.drawImage(renderer.domElement, 0, 0);
+        drawExportOverlays(recCtx, w, h);
+        requestAnimationFrame(drawCompositeFrame);
+      }
+      drawCompositeFrame();
+    } else {
+      stream = renderer.domElement.captureStream(60);
+    }
+
+    const chunks = [];
+    const mp4Ok = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1');
+    const mimeType = mp4Ok ? 'video/mp4;codecs=avc1'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+    const fileExt = mp4Ok ? 'mp4' : 'webm';
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 40_000_000 });
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.start();
+
+    // Run full tour
+    const order = getAutoTourOrder();
+
+    resetView();
+    await waitForCameraAnim();
+    await waitSeconds(exportRoomDuration);
+
+    for (const ri of order) {
+      focusRoom(ri);
+      await waitForCameraAnim();
+      await waitSeconds(exportRoomDuration);
+    }
+
+    resetView();
+    await waitForCameraAnim();
+    await waitSeconds(exportRoomDuration);
+
+    // Finish recording
+    recCapturing = false;
+    await new Promise(resolve => { recorder.onstop = resolve; recorder.stop(); });
+
+    // Trigger download
+    const blob = new Blob(chunks, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `roam-${preset.name}.${fileExt}`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // Show downloaded state
+    recIndicator.classList.add('downloaded');
+    recLabel.textContent = 'Downloaded';
+    setTimeout(() => { recIndicator.classList.remove('active', 'downloaded'); }, 3000);
+  } catch (err) {
+    console.error('Export failed:', err);
+    recIndicator.classList.remove('downloaded');
+    recIndicator.classList.add('active');
+    recLabel.textContent = 'Export failed: ' + (err.message || err);
+    setTimeout(() => { recIndicator.classList.remove('active'); }, 6000);
+  } finally {
+    recCapturing = false;
+    isRecording = false;
+    // Restore renderer to window size
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    clickedBtn.classList.remove('exporting');
+    document.querySelectorAll('.export-btn').forEach(b => b.disabled = false);
+    resetView();
+    startAutoTour();
+  }
+}
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+/* ============================================================
+   ANIMATION LOOP
+   ============================================================ */
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const elapsed = clock.elapsedTime;
+
+  if (camAnim.active) {
+    camAnim.progress += delta / camAnim.duration;
+    if (camAnim.progress >= 1) { camAnim.progress = 1; camAnim.active = false; }
+    const t = easeInOutCubic(camAnim.progress);
+    camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, t);
+    controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, t);
+  }
+
+  // Animate layout transition
+  if (layoutAnim.active) {
+    layoutAnim.progress += delta / layoutAnim.duration;
+    if (layoutAnim.progress >= 1) { layoutAnim.progress = 1; layoutAnim.active = false; }
+    const lt = easeInOutCubic(layoutAnim.progress);
+    for (let ri = 0; ri < NUM_ROOMS; ri++) {
+      const g = roomGroupRefs[ri];
+      if (!g) continue;
+      const s = layoutAnim.startPositions[ri];
+      const e = layoutAnim.endPositions[ri];
+      g.position.set(
+        s.x + (e.x - s.x) * lt,
+        s.y + (e.y - s.y) * lt,
+        s.z + (e.z - s.z) * lt
+      );
+    }
+  }
+
+  if (!camAnim.active && autoTourInterval && selectedRoom >= 0) {
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.15;
+  } else if (!camAnim.active && selectedRoom < 0 && Date.now() - lastInteraction > 3000) {
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.3;
+  }
+
+  controls.update();
+  if (mouseMoved) { checkHover(); mouseMoved = false; }
+
+  // Animate vehicles + light trails
+  vehicles.forEach(v => {
+    v.pos += v.speed * v.dir * delta;
+    if (v.pos > 60) v.pos = -60;
+    if (v.pos < -60) v.pos = 60;
+    if (v.road === 'x') v.group.position.x = v.pos;
+    else v.group.position.z = v.pos;
+
+    // Drop a trail segment periodically
+    v.trailTimer += delta;
+    if (v.trailTimer > 0.04) {
+      v.trailTimer = 0;
+      const tm = v.trailMeshes[v.trailIdx];
+      const tmat = v.trailMats[v.trailIdx];
+      if (v.road === 'x') {
+        tm.position.set(v.pos, 0.02, v.group.position.z);
+        tm.rotation.z = 0;
+      } else {
+        tm.position.set(v.group.position.x, 0.02, v.pos);
+        tm.rotation.z = Math.PI / 2;
+      }
+      tmat.opacity = 0.4;
+      tm.visible = true;
+      v.trailIdx = (v.trailIdx + 1) % v.trailMeshes.length;
+    }
+
+    // Fade all trail segments
+    v.trailMats.forEach((tmat, i) => {
+      if (tmat.opacity > 0) {
+        tmat.opacity -= delta * 0.5;
+        if (tmat.opacity <= 0) { tmat.opacity = 0; v.trailMeshes[i].visible = false; }
+      }
+    });
+  });
+
+  // Subtle pulse on non-selected rooms (throttled to ~40 distinct levels)
+  const pulse = 0.02 * Math.sin(elapsed * 2);
+  const pulseQuant = Math.round(pulse * 500);
+  if (pulseQuant !== lastPulseQuant) {
+    lastPulseQuant = pulseQuant;
+    const br = ((NEON_BRIGHT >> 16) & 0xff) / 255;
+    const bg = ((NEON_BRIGHT >> 8) & 0xff) / 255;
+    const bb = (NEON_BRIGHT & 0xff) / 255;
+    roomNeonMats.forEach((mat, i) => {
+      if (i !== selectedRoom && i !== hoveredRoom) {
+        mat.color.setRGB(br + pulse*0.5, bg + pulse*0.6, bb + pulse);
+      }
+    });
+  }
+
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime >= 1000) {
+    fpsEl.textContent = `${frameCount} FPS`;
+    frameCount = 0; lastFpsTime = now;
+  }
+}
+
+/* ============================================================
+   START
+   ============================================================ */
+init();
+</script>
+</body>
+</html>
